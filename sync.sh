@@ -36,6 +36,8 @@ AI 配置分层同步脚本（优先级：项目 > 公司 > 个人）
   ./sync.sh push "提交说明"             提交 ai-repository 改动并 push 到 GitHub
   ./sync.sh install [project-dir]      为项目生成分层 CLAUDE.md（默认当前目录）
   ./sync.sh status                     查看 ai-repository 与 GitHub 同步状态
+  ./sync.sh bootstrap                  注册 SessionStart hook 到 ~/.claude/settings.json
+                                       （换新电脑 clone 后运行一次即可启用自动同步）
 EOF
 }
 
@@ -254,11 +256,51 @@ cmd_install_regen_hook_section() {
   fi
 }
 
+# ============ bootstrap：注册全局 hook（换电脑用）============
+cmd_bootstrap() {
+  local settings="$HOME/.claude/settings.json"
+  mkdir -p "$(dirname "$settings")"
+  step "注册 SessionStart hook 到用户级 settings.json..."
+  node -e '
+    const fs = require("fs");
+    const settingsPath = process.argv[1];
+    const hookScript = process.argv[2];
+    let cfg = {};
+    if (fs.existsSync(settingsPath)) {
+      try { cfg = JSON.parse(fs.readFileSync(settingsPath, "utf-8")); } catch(e) { cfg = {}; }
+    }
+    cfg.hooks = cfg.hooks || {};
+    cfg.hooks.SessionStart = cfg.hooks.SessionStart || [];
+    // 先移除所有指向 on-session-start.sh 的旧 hook（统一路径风格，保证幂等）
+    let removed = 0;
+    cfg.hooks.SessionStart = cfg.hooks.SessionStart.filter(g => {
+      const before = (g.hooks || []).length;
+      g.hooks = (g.hooks || []).filter(h =>
+        !(h.args || []).some(a => typeof a === "string" && a.includes("on-session-start.sh"))
+      );
+      removed += before - g.hooks.length;
+      return (g.hooks || []).length > 0;
+    });
+    // 注入当前路径的 hook
+    cfg.hooks.SessionStart.push({
+      matcher: "startup|resume",
+      hooks: [{ type: "command", command: "bash", args: [hookScript], timeout: 30 }]
+    });
+    fs.writeFileSync(settingsPath, JSON.stringify(cfg, null, 2) + "\n");
+    console.log(removed > 0
+      ? "已更新 SessionStart hook（替换 " + removed + " 条旧配置）→ " + settingsPath
+      : "已注入 SessionStart hook → " + settingsPath);
+  ' "$settings" "$AI_REPO_DIR/hooks/on-session-start.sh"
+  info "完成。新会话启动时将自动同步 ai-repository。"
+  info "验证: 在 Claude Code 运行 /hooks"
+}
+
 # ============ 主入口 ============
 case "${1:-}" in
-  pull)    cmd_pull ;;
-  push)    cmd_push "${2:-update ai rules}" ;;
-  install) cmd_install "${2:-.}" ;;
-  status)  cmd_status ;;
-  *)       usage; exit 1 ;;
+  pull)      cmd_pull ;;
+  push)      cmd_push "${2:-update ai rules}" ;;
+  install)   cmd_install "${2:-.}" ;;
+  status)    cmd_status ;;
+  bootstrap) cmd_bootstrap ;;
+  *)         usage; exit 1 ;;
 esac

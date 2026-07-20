@@ -16,7 +16,10 @@
 
 set +e
 
-AI_REPO="/d/hub/ai-repository"
+# 自定位：脚本在 ai-repository/hooks/ 下，上一级即 ai-repository 根目录
+# 这样换电脑、换路径都能自适应，不依赖硬编码路径
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AI_REPO="$(dirname "$SCRIPT_DIR")"
 PROJECT_DIR="${PWD:-$(pwd)}"
 
 # ai-repository 不存在则静默退出
