@@ -10,7 +10,9 @@ personal/
 ├── rules/        # 个人规则
 │   ├── hooks/    # Hook 规则（SQL 审计、SQL 安全守卫等）
 │   └── steering/ # 代码风格规范
-└── skills/       # 个人 Skills
+├── skills/       # 个人 Skills
+└── tools/        # 工具脚本
+    └── hook-converter.js  # Kiro Hook → Claude Code CLAUDE.md 转换器
 ```
 
 ## 内容来源
