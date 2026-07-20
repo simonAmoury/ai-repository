@@ -8,8 +8,8 @@
 Thumbs.db
 
 # Secrets (不要提交真实配置)
-mcp/settings.json
-sql-guard.json
+**/mcp/settings.json
+**/sql-guard.json
 
 # Logs
 *.log

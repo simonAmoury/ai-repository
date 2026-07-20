@@ -1,6 +1,7 @@
 {
   "allowedDatabases": [
-    "<your-database>"
+    "pac_foreign_test02",
+    "adplatform_test02"
   ],
   "allowedOperations": [
     "SELECT",

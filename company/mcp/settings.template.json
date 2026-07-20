@@ -8,9 +8,9 @@
         "mysql_mcp_server"
       ],
       "env": {
-        "MYSQL_HOST": "<your-host>",
+        "MYSQL_HOST": "172.24.2.34",
         "MYSQL_PORT": "3306",
-        "MYSQL_USER": "<your-user>",
+        "MYSQL_USER": "mobi",
         "MYSQL_PASSWORD": "<your-password>"
       },
       "disabled": false,
