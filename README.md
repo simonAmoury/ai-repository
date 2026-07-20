@@ -89,6 +89,21 @@ cd /d/hub/ai-repository
 项目 `CLAUDE.md` 通过相对路径 `@../ai-repository/...` 引用规范源文件。
 在 `D:\hub\ai-repository` 改动后，**项目重启 Claude Code 即自动读取最新规则**，无需重新 install 或复制。
 
+### 换电脑迁移（3 步）
+
+```bash
+# 1. clone ai-repository（建议与其他项目同级）
+git clone git@github.com:simonAmoury/ai-repository.git /d/hub/ai-repository
+
+# 2. 注册全局 SessionStart hook（自动写入 ~/.claude/settings.json，幂等）
+cd /d/hub/ai-repository && ./sync.sh bootstrap
+
+# 3. 完成。新会话自动 pull 最新规范 + 提示未推送/未接入
+```
+
+> 补充：MySQL MCP 依赖 `uvx`，换电脑需单独安装 `uv`。
+> hook 脚本自定位路径，不依赖硬编码，clone 到任意位置均可。
+
 ## 各工具适配
 
 | 工具 | 接入方式 |
