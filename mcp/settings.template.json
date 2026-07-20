@@ -1,0 +1,33 @@
+{
+  "mcpServers": {
+    "mysql": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "mysql-mcp-server",
+        "mysql_mcp_server"
+      ],
+      "env": {
+        "MYSQL_HOST": "<your-host>",
+        "MYSQL_PORT": "3306",
+        "MYSQL_USER": "<your-user>",
+        "MYSQL_PASSWORD": "<your-password>",
+        "MYSQL_DATABASE": "<your-database>"
+      },
+      "disabled": false,
+      "autoApprove": [
+        "query",
+        "execute_sql"
+      ],
+      "disabledTools": []
+    },
+    "codegraph": {
+      "type": "stdio",
+      "command": "codegraph",
+      "args": [
+        "serve",
+        "--mcp"
+      ]
+    }
+  }
+}

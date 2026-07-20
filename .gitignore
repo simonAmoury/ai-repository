@@ -1,24 +1,19 @@
-# Compiled class file
-*.class
+# IDE
+.idea/
+.vscode/
+*.iml
 
-# Log file
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets (不要提交真实配置)
+mcp/settings.json
+sql-guard.json
+
+# Logs
 *.log
 
-# BlueJ files
-*.ctxt
-
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
-
-# Package Files #
-*.jar
-*.war
-*.nar
-*.ear
+# Archives (skill 内的 Archive.zip 除外)
 *.zip
-*.tar.gz
-*.rar
-
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
-hs_err_pid*
-replay_pid*
+!skills/**/Archive.zip

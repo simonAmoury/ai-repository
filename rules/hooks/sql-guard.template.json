@@ -1,0 +1,11 @@
+{
+  "allowedDatabases": [
+    "pac_foreign_test02",
+    "adplatform_test02"
+  ],
+  "allowedOperations": [
+    "SELECT",
+    "INSERT",
+    "CREATE"
+  ]
+}
