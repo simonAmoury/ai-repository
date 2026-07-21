@@ -1,20 +1,21 @@
 # 公司规范
 
-公司级别的 AI 配置，适用于团队统一的规范和约束。
+公司级 AI 配置,优先级高于 `personal/`。
 
 ## 目录结构
 
 ```
 company/
-├── mcp/          # 公司统一的 MCP 服务器配置
-├── rules/        # 公司统一的规则
-│   ├── hooks/    # Hook 规则
-│   └── steering/ # 代码风格规范
-└── skills/       # 团队共用 Skills
+├── mcp/
+│   └── settings.template.json   # 公司 MCP 配置模板（脱敏）
+└── rules/
+    └── hooks/
+        └── sql-guard.template.json
 ```
 
 ## 使用原则
 
 - 公司规范优先级高于个人规范
-- 公司规范由团队负责人维护
-- 个人可在此基础上通过 personal/ 目录叠加个人偏好
+- 由团队负责人维护
+- 个人可在 `personal/` 叠加个人偏好
+- 真实凭据版本 `settings.json` 已 gitignore,仓库只存脱敏模板
