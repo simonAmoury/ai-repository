@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
- * Kiro Hook → Claude Code CLAUDE.md 转换器
+ * 通用 Rule → Claude Code CLAUDE.md 转换器
  *
  * 用法:
- *   node hook-converter.js <hooks-dir> [output-file]
+ *   node hook-converter.js <rules-dir> [output-file]
  *
  * 示例:
  *   node hook-converter.js ../rules/hooks ./CLAUDE.md
  *   node hook-converter.js ../rules/hooks              # 输出到 stdout
  *
  * 功能:
- *   - 读取指定目录下的所有 .hook 文件（Kiro 格式）
+ *   - 读取指定目录下的所有 .rule.json 文件（通用格式）
  *   - 转换为 Claude Code 的 CLAUDE.md 规则格式
  *   - 输出到指定文件或 stdout
  */
@@ -22,7 +22,7 @@ const hooksDir = process.argv[2];
 const outputFile = process.argv[3];
 
 if (!hooksDir) {
-  console.error('用法: node hook-converter.js <hooks-dir> [output-file]');
+  console.error('用法: node hook-converter.js <rules-dir> [output-file]');
   console.error('示例: node hook-converter.js ../rules/hooks ./CLAUDE.md');
   process.exit(1);
 }
@@ -33,13 +33,13 @@ if (!fs.existsSync(resolvedDir)) {
   process.exit(1);
 }
 
-// 读取所有 .hook 文件
+// 读取所有 .rule.json 文件
 const hookFiles = fs.readdirSync(resolvedDir)
-  .filter(f => f.endsWith('.hook'))
+  .filter(f => f.endsWith('.rule.json'))
   .map(f => path.join(resolvedDir, f));
 
 if (hookFiles.length === 0) {
-  console.error(`未找到 .hook 文件: ${resolvedDir}`);
+  console.error(`未找到 .rule.json 文件: ${resolvedDir}`);
   process.exit(1);
 }
 

@@ -1,26 +1,31 @@
 #!/bin/bash
 #
-# AI 配置分层同步脚本
+# AI 配置同步入口（调度脚本）
 #
-# 三层配置，优先级：项目级 > 公司级 > 个人级
+# ai-repository 存储"通用规范"，各 agent 用自己的转换脚本生成专属格式。
+# 分层优先级：项目级 > 公司级 > 个人级
 #
 # 用法:
-#   ./sync.sh pull                       # ai-repository 从 GitHub 拉取最新
-#   ./sync.sh push "提交说明"             # ai-repository 改动提交并 push 到 GitHub
-#   ./sync.sh install [project-dir]      # 为项目生成分层 CLAUDE.md（默认当前目录）
-#   ./sync.sh status                     # 查看 ai-repository 与 GitHub 的同步状态
+#   git 操作（作用于 ai-repository 自身）:
+#     ./sync.sh pull                    从 GitHub 拉取最新规范
+#     ./sync.sh push "提交说明"          提交并推送到 GitHub
+#     ./sync.sh status                  查看与 GitHub 的同步状态
 #
-# 工作目录:
-#   - pull/push/status：在 ai-repository 本目录操作（即 D:\hub\ai-repository）
-#   - install：在目标项目生成 CLAUDE.md，通过相对路径 @import 引用 ai-repository
+#   agent 同步（把通用规范应用到各工具）:
+#     ./sync.sh claude install [dir]    生成项目分层 CLAUDE.md（默认当前目录）
+#     ./sync.sh claude bootstrap        注册 Claude SessionStart hook
+#     ./sync.sh kiro                    同步规范到 ~/.kiro/
+#     ./sync.sh codex                   同步规范到 ~/.codex/
+#     ./sync.sh all [dir]               依次同步三个 agent
+#
+#   各 agent 脚本也可独立运行：scripts/sync-{claude,kiro,codex}.sh
 #
 
 set -e
 
-# 脚本所在目录 = ai-repository 根目录
 AI_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPTS_DIR="$AI_REPO_DIR/scripts"
 
-# 颜色
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 info()  { echo -e "${GREEN}[INFO]${NC} $1"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
@@ -29,34 +34,42 @@ step()  { echo -e "${BLUE}[STEP]${NC} $1"; }
 
 usage() {
   cat <<EOF
-AI 配置分层同步脚本（优先级：项目 > 公司 > 个人）
+AI 配置同步入口（通用规范 → 各 agent 专属格式）
 
-用法:
-  ./sync.sh pull                       从 GitHub 拉取 ai-repository 最新规范
-  ./sync.sh push "提交说明"             提交 ai-repository 改动并 push 到 GitHub
-  ./sync.sh install [project-dir]      为项目生成分层 CLAUDE.md（默认当前目录）
-  ./sync.sh status                     查看 ai-repository 与 GitHub 同步状态
-  ./sync.sh bootstrap                  注册 SessionStart hook 到 ~/.claude/settings.json
-                                       （换新电脑 clone 后运行一次即可启用自动同步）
+git 操作（作用于 ai-repository 自身）:
+  ./sync.sh pull                    从 GitHub 拉取最新规范
+  ./sync.sh push "提交说明"          提交并推送到 GitHub
+  ./sync.sh status                  查看与 GitHub 的同步状态
+
+agent 同步（把通用规范应用到各工具）:
+  ./sync.sh claude install [dir]    生成项目分层 CLAUDE.md（默认当前目录）
+  ./sync.sh claude bootstrap        注册 Claude SessionStart hook（换电脑用）
+  ./sync.sh kiro                    同步规范到 ~/.kiro/
+  ./sync.sh codex                   同步规范到 ~/.codex/
+  ./sync.sh all [dir]               依次同步三个 agent
+
+说明:
+  - 只有 Claude 有会话启动 hook 能自动 pull；Kiro/Codex 需手动跑对应命令。
+  - 各 agent 脚本也可独立运行：scripts/sync-{claude,kiro,codex}.sh
 EOF
 }
 
-# ============ pull：从 GitHub 拉取 ============
+# ============ git 操作 ============
 cmd_pull() {
   step "从 GitHub 拉取最新规范..."
   cd "$AI_REPO_DIR"
   git fetch origin
+  local branch=$(git branch --show-current)
   LOCAL=$(git rev-parse HEAD)
-  REMOTE=$(git rev-parse origin/$(git branch --show-current))
+  REMOTE=$(git rev-parse "origin/$branch")
   if [ "$LOCAL" = "$REMOTE" ]; then
     info "已是最新（$LOCAL）"
   else
-    git pull origin "$(git branch --show-current)"
+    git pull origin "$branch"
     info "已更新到最新"
   fi
 }
 
-# ============ push：提交并推送 ============
 cmd_push() {
   local msg="${1:-update ai rules}"
   cd "$AI_REPO_DIR"
@@ -73,7 +86,6 @@ cmd_push() {
   info "已推送到 GitHub"
 }
 
-# ============ status：同步状态 ============
 cmd_status() {
   cd "$AI_REPO_DIR"
   local branch=$(git branch --show-current)
@@ -81,226 +93,30 @@ cmd_status() {
   echo "远程: $(git remote get-url origin)"
   git fetch origin 2>/dev/null
   LOCAL=$(git rev-parse HEAD)
-  REMOTE=$(git rev-parse origin/$branch 2>/dev/null || echo "unknown")
-  AHEAD=$(git rev-list --count origin/$branch..HEAD 2>/dev/null || echo 0)
-  BEHIND=$(git rev-list --count HEAD..origin/$branch 2>/dev/null || echo 0)
+  REMOTE=$(git rev-parse "origin/$branch" 2>/dev/null || echo "unknown")
+  AHEAD=$(git rev-list --count "origin/$branch..HEAD" 2>/dev/null || echo 0)
+  BEHIND=$(git rev-list --count "HEAD..origin/$branch" 2>/dev/null || echo 0)
   echo "本地: $LOCAL"
   echo "远程: $REMOTE"
   echo "领先远程: $AHEAD 个提交（待 push）"
   echo "落后远程: $BEHIND 个提交（待 pull）"
 }
 
-# ============ install：为项目生成分层 CLAUDE.md ============
-cmd_install() {
-  local project_dir="${1:-.}"
-  project_dir="$(cd "$project_dir" && pwd)"
-  local claude_dir="$project_dir/.claude"
-
-  step "安装分层配置到: $project_dir"
-
-  # 计算 project_dir 相对 ai-repository 的路径
-  local rel
-  rel=$(node -e "
-    const p = require('path');
-    const from = String.raw\`$project_dir\`.replace(/\\\\/g, '/');
-    const to = String.raw\`$AI_REPO_DIR\`.replace(/\\\\/g, '/');
-    let r = p.relative(from, to).replace(/\\\\/g, '/');
-    if (!r.startsWith('.')) r = './' + r;
-    process.stdout.write(r);
-  ")
-
-  info "ai-repository 相对路径: $rel"
-  mkdir -p "$claude_dir"
-
-  # ---- 1. 生成 CLAUDE.md（项目根目录）----
-  local claude_md="$project_dir/CLAUDE.md"
-  {
-    echo "# 项目规则"
-    echo ""
-    echo "> 本文件由 \`ai-repository/sync.sh install\` 生成。"
-    echo "> 分层优先级：**项目级（本节） > 公司规范 > 个人规范**，冲突时以项目级规则为准。"
-    echo "> 更新下层规范后无需重新 install，Claude Code 启动时自动通过 \`@import\` 读取最新内容。"
-    echo ""
-    echo "## 项目级规则（最高优先级）"
-    echo ""
-    echo "<!-- 在此添加项目特有规则，会覆盖下方导入的规范 -->"
-    echo ""
-    echo "(暂无项目特有规则)"
-    echo ""
-    echo "---"
-    echo ""
-
-    # 公司 steering
-    if ls "$AI_REPO_DIR"/company/rules/steering/*.md >/dev/null 2>&1; then
-      echo "## 公司规范"
-      echo ""
-      for f in "$AI_REPO_DIR"/company/rules/steering/*.md; do
-        [ -f "$f" ] || continue
-        local name=$(basename "$f")
-        echo "### $(basename "$name" .md)"
-        echo ""
-        echo "@${rel}/company/rules/steering/${name}"
-        echo ""
-        info "导入公司规范: $name" >&2
-      done
-    fi
-
-    # 个人 steering
-    if ls "$AI_REPO_DIR"/personal/rules/steering/*.md >/dev/null 2>&1; then
-      echo "## 个人规范"
-      echo ""
-      for f in "$AI_REPO_DIR"/personal/rules/steering/*.md; do
-        [ -f "$f" ] || continue
-        local name=$(basename "$f")
-        echo "### $(basename "$name" .md)"
-        echo ""
-        echo "@${rel}/personal/rules/steering/${name}"
-        echo ""
-        info "导入个人规范: $name" >&2
-      done
-    fi
-
-    # hook 规则（转换后生成）
-    if [ -f "$claude_dir/hooks-rules.md" ]; then
-      echo "## Hook 规则（由 .hook 自动转换）"
-      echo ""
-      echo "@.claude/hooks-rules.md"
-      echo ""
-    fi
-  } > "$claude_md"
-  info "已生成: CLAUDE.md"
-
-  # ---- 2. 转换 hooks → hooks-rules.md ----
-  local converter="$AI_REPO_DIR/personal/tools/hook-converter.js"
-  local hooks_found=0
-  local tmp_hooks=$(mktemp -d)
-  # 收集公司 + 个人的 .hook 文件
-  for d in company personal; do
-    if [ -d "$AI_REPO_DIR/$d/rules/hooks" ]; then
-      for f in "$AI_REPO_DIR"/$d/rules/hooks/*.hook; do
-        [ -f "$f" ] || continue
-        cp "$f" "$tmp_hooks/"
-        hooks_found=$((hooks_found + 1))
-      done
-    fi
-  done
-  if [ "$hooks_found" -gt 0 ] && [ -f "$converter" ]; then
-    node "$converter" "$tmp_hooks" "$claude_dir/hooks-rules.md" >/dev/null
-    info "已转换 $hooks_found 个 hook → .claude/hooks-rules.md"
-    # 重新生成 CLAUDE.md 以包含 hook import（因为之前 hooks-rules.md 可能刚生成）
-    cmd_install_regen_hook_section "$project_dir" "$rel"
-  else
-    rm -f "$claude_dir/hooks-rules.md"
-  fi
-  rm -rf "$tmp_hooks"
-
-  # ---- 3. 复制 MCP 配置（公司优先）----
-  local mcp_src=""
-  if [ -f "$AI_REPO_DIR/company/mcp/settings.json" ]; then
-    mcp_src="$AI_REPO_DIR/company/mcp/settings.json"
-    info "MCP 配置来源: 公司规范（含真实凭据）"
-  elif [ -f "$AI_REPO_DIR/company/mcp/settings.template.json" ]; then
-    mcp_src="$AI_REPO_DIR/company/mcp/settings.template.json"
-    warn "MCP 配置来源: 公司模板（需填真实凭据）"
-  elif [ -f "$AI_REPO_DIR/personal/mcp/settings.template.json" ]; then
-    mcp_src="$AI_REPO_DIR/personal/mcp/settings.template.json"
-    warn "MCP 配置来源: 个人模板（需填真实凭据）"
-  fi
-  if [ -n "$mcp_src" ]; then
-    cp "$mcp_src" "$project_dir/.mcp.json"
-    info "已生成: .mcp.json（项目级 MCP 配置）"
-    # .mcp.json 含凭据，确保被 gitignore
-    if ! grep -qx '.mcp.json' "$project_dir/.gitignore" 2>/dev/null; then
-      printf '\n# MCP 配置（含凭据，勿提交）\n.mcp.json\n' >> "$project_dir/.gitignore"
-      info "已将 .mcp.json 加入 .gitignore"
-    fi
-  fi
-
-  # ---- 4. 复制 sql-guard.json（如不存在）----
-  if [ ! -f "$project_dir/sql-guard.json" ]; then
-    local guard_src=""
-    [ -f "$AI_REPO_DIR/company/rules/hooks/sql-guard.template.json" ] && guard_src="$AI_REPO_DIR/company/rules/hooks/sql-guard.template.json"
-    [ -z "$guard_src" ] && [ -f "$AI_REPO_DIR/personal/rules/hooks/sql-guard.template.json" ] && guard_src="$AI_REPO_DIR/personal/rules/hooks/sql-guard.template.json"
-    if [ -n "$guard_src" ]; then
-      cp "$guard_src" "$project_dir/sql-guard.json"
-      info "已生成: sql-guard.json（请按项目修改 allowedDatabases）"
-    fi
-  else
-    info "sql-guard.json 已存在，保留"
-  fi
-
-  echo ""
-  step "安装完成。生成文件："
-  echo "  - $project_dir/CLAUDE.md       （分层规则入口）"
-  echo "  - $claude_dir/hooks-rules.md   （hook 转换规则，如有）"
-  echo "  - $project_dir/.mcp.json       （MCP 配置，已 gitignore）"
-  echo "  - $project_dir/sql-guard.json  （SQL 安全配置，如有）"
-  echo ""
-  info "更新下层规范：cd $AI_REPO_DIR && ./sync.sh pull"
-  info "Claude Code 重启后自动读取最新规则"
-}
-
-# 重新写 CLAUDE.md 的 hook 区段（处理 hook 转换与 CLAUDE.md 生成的顺序依赖）
-cmd_install_regen_hook_section() {
-  local project_dir="$1" rel="$2"
-  local claude_md="$project_dir/CLAUDE.md"
-  # 如果 CLAUDE.md 还没包含 hook import 行，追加
-  if ! grep -q "hooks-rules.md" "$claude_md" 2>/dev/null; then
-    {
-      echo ""
-      echo "## Hook 规则（由 .hook 自动转换）"
-      echo ""
-      echo "@.claude/hooks-rules.md"
-      echo ""
-    } >> "$claude_md"
-  fi
-}
-
-# ============ bootstrap：注册全局 hook（换电脑用）============
-cmd_bootstrap() {
-  local settings="$HOME/.claude/settings.json"
-  mkdir -p "$(dirname "$settings")"
-  step "注册 SessionStart hook 到用户级 settings.json..."
-  node -e '
-    const fs = require("fs");
-    const settingsPath = process.argv[1];
-    const hookScript = process.argv[2];
-    let cfg = {};
-    if (fs.existsSync(settingsPath)) {
-      try { cfg = JSON.parse(fs.readFileSync(settingsPath, "utf-8")); } catch(e) { cfg = {}; }
-    }
-    cfg.hooks = cfg.hooks || {};
-    cfg.hooks.SessionStart = cfg.hooks.SessionStart || [];
-    // 先移除所有指向 on-session-start.sh 的旧 hook（统一路径风格，保证幂等）
-    let removed = 0;
-    cfg.hooks.SessionStart = cfg.hooks.SessionStart.filter(g => {
-      const before = (g.hooks || []).length;
-      g.hooks = (g.hooks || []).filter(h =>
-        !(h.args || []).some(a => typeof a === "string" && a.includes("on-session-start.sh"))
-      );
-      removed += before - g.hooks.length;
-      return (g.hooks || []).length > 0;
-    });
-    // 注入当前路径的 hook
-    cfg.hooks.SessionStart.push({
-      matcher: "startup|resume",
-      hooks: [{ type: "command", command: "bash", args: [hookScript], timeout: 30 }]
-    });
-    fs.writeFileSync(settingsPath, JSON.stringify(cfg, null, 2) + "\n");
-    console.log(removed > 0
-      ? "已更新 SessionStart hook（替换 " + removed + " 条旧配置）→ " + settingsPath
-      : "已注入 SessionStart hook → " + settingsPath);
-  ' "$settings" "$AI_REPO_DIR/hooks/on-session-start.sh"
-  info "完成。新会话启动时将自动同步 ai-repository。"
-  info "验证: 在 Claude Code 运行 /hooks"
-}
-
-# ============ 主入口 ============
+# ============ 主入口：git 操作本地处理，agent 同步调度到子脚本 ============
 case "${1:-}" in
-  pull)      cmd_pull ;;
-  push)      cmd_push "${2:-update ai rules}" ;;
-  install)   cmd_install "${2:-.}" ;;
-  status)    cmd_status ;;
-  bootstrap) cmd_bootstrap ;;
-  *)         usage; exit 1 ;;
+  pull)    cmd_pull ;;
+  push)    cmd_push "${2:-update ai rules}" ;;
+  status)  cmd_status ;;
+  claude)  shift; bash "$SCRIPTS_DIR/sync-claude.sh" "$@" ;;
+  kiro)    shift; bash "$SCRIPTS_DIR/sync-kiro.sh" "${1:-sync}" ;;
+  codex)   shift; bash "$SCRIPTS_DIR/sync-codex.sh" "${1:-sync}" ;;
+  all)
+    step "依次同步三个 agent..."
+    bash "$SCRIPTS_DIR/sync-claude.sh" install "${2:-.}"
+    echo ""
+    bash "$SCRIPTS_DIR/sync-kiro.sh" sync
+    echo ""
+    bash "$SCRIPTS_DIR/sync-codex.sh" sync
+    ;;
+  *)       usage; exit 1 ;;
 esac
