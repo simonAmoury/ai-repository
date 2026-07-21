@@ -1,6 +1,17 @@
 # AI Repository
 
-公用 AI 配置仓库。提供**三层配置体系**与自动同步流程，供 `.claude` / `.codex` / `.kiro` 共用。
+公用 AI 配置仓库。**通用规范架构**——存储 agent 无关的规范，各工具用自己的转换脚本生成专属格式。
+
+## 核心理念
+
+```
+ai-repository（通用规范，单一事实来源）
+   ├─ scripts/sync-claude.sh  → Claude Code 专属格式（CLAUDE.md + .mcp.json）
+   ├─ scripts/sync-kiro.sh    → Kiro 专属格式（~/.kiro/steering + hooks）
+   └─ scripts/sync-codex.sh   → Codex 专属格式（~/.codex/AGENTS.md + config.toml）
+```
+
+三个工具地位对等，未来加 Cursor/Windsurf 只需添加对应转换脚本。
 
 ## 三层配置（优先级从高到低）
 
@@ -17,39 +28,47 @@
 ai-repository/
 ├── personal/                      # 个人全局规范
 │   ├── rules/
-│   │   ├── steering/              # 代码风格、语言偏好（.md，可被 @import）
-│   │   └── hooks/                 # Hook 规则（.hook，Kiro 格式）
-│   ├── mcp/                       # MCP 配置模板
-│   ├── skills/                    # 个人 Skills
-│   └── tools/
-│       └── hook-converter.js      # .hook → CLAUDE.md 转换器
-├── company/                       # 公司级规范（优先级高于 personal）
-│   ├── rules/
+│   │   ├── steering/              # 代码风格、语言偏好（Markdown，通用）
 │   │   └── hooks/
+│   │       ├── *.rule.json        # 通用规则（JSON 结构，agent 无关）
 │   │       └── sql-guard.template.json
+│   ├── mcp/settings.template.json # MCP 配置模板
+│   ├── skills/                    # 共用 Skills（Claude 专用）
+│   └── tools/hook-converter.js    # .rule.json → CLAUDE.md 转换器
+├── company/                       # 公司级规范（优先级高于 personal）
+│   ├── rules/hooks/sql-guard.template.json
 │   └── mcp/
 │       ├── settings.json          # 真实凭据（已 gitignore）
 │       └── settings.template.json # 脱敏模板
-└── sync.sh                        # 三合一同步脚本（pull/push/install/status）
+├── scripts/
+│   ├── sync-claude.sh             # 通用规范 → Claude Code（@import 活引用）
+│   ├── sync-kiro.sh               # 通用规范 → Kiro（复制到 ~/.kiro/）
+│   └── sync-codex.sh              # 通用规范 → Codex（合并到 ~/.codex/）
+├── hooks/on-session-start.sh      # SessionStart hook（Claude 专用，自动 pull）
+└── sync.sh                        # 入口：git 操作 + 调度三个子脚本
 ```
 
 ## sync.sh 用法
 
-所有操作都通过 `sync.sh`：
+### git 操作（作用于 ai-repository 自身）
 
 ```bash
-# ① 拉取：从 GitHub 同步最新规范到本机
-./sync.sh pull
-
-# ② 推送：本机改动提交并 push 到 GitHub
-./sync.sh push "提交说明"
-
-# ③ 查看与 GitHub 的同步状态
-./sync.sh status
-
-# ④ 安装：为某项目生成分层 CLAUDE.md（项目 > 公司 > 个人）
-./sync.sh install /path/to/project
+./sync.sh pull                    # 从 GitHub 拉取最新规范
+./sync.sh push "提交说明"          # 提交并推送到 GitHub
+./sync.sh status                  # 查看与 GitHub 的同步状态
 ```
+
+### agent 同步（把通用规范应用到各工具）
+
+```bash
+./sync.sh claude install [dir]    # 生成项目分层 CLAUDE.md（默认当前目录）
+./sync.sh claude bootstrap        # 注册 Claude SessionStart hook（换电脑用）
+./sync.sh kiro                    # 同步规范到 ~/.kiro/（全局）
+./sync.sh codex                   # 同步规范到 ~/.codex/（全局）
+./sync.sh all [dir]               # 依次同步三个 agent
+```
+
+三个子脚本也可独立运行：`scripts/sync-{claude,kiro,codex}.sh`
 
 ## 工作流
 
@@ -58,8 +77,9 @@ ai-repository/
 ```bash
 cd /d/hub/ai-repository
 
-# 编辑规则，例如
-# vim personal/rules/steering/code_style.md
+# 编辑通用规则
+vim personal/rules/steering/code_style.md
+vim personal/rules/hooks/mysql-sql-guard.rule.json
 
 ./sync.sh push "补充多线程规范"    # 改动自动 push 到 GitHub
 ```
@@ -71,58 +91,109 @@ cd /d/hub/ai-repository
 ./sync.sh pull
 ```
 
-### 新项目接入（在项目目录）
+### 新项目/新电脑接入
+
+#### Claude Code（自动 pull + 活引用）
 
 ```bash
-# 一键生成分层配置
-/d/hub/ai-repository/sync.sh install .
+# 项目接入
+/d/hub/ai-repository/sync.sh claude install .
 
 # 生成物：
-#   ./CLAUDE.md          分层规则入口（项目级规则 + @import 公司/个人规范）
-#   ./.mcp.json          MCP 配置（自动 gitignore，含凭据）
-#   ./.claude/hooks-rules.md   hook 转换规则
+#   ./CLAUDE.md          分层规则入口（项目级规则 + @import 公司/个人规范源文件）
+#   ./.mcp.json          MCP 配置（自动 gitignore）
+#   ./.claude/hooks-rules.md   规则转换结果
 #   ./sql-guard.json     SQL 安全配置
+
+# 换电脑：注册全局 SessionStart hook（自动 pull ai-repository）
+/d/hub/ai-repository/sync.sh claude bootstrap
 ```
 
-### 规范更新后（项目无需操作）
+**关键优势**：项目 `CLAUDE.md` 通过 `@../ai-repository/...` **活引用**源文件。你改了 ai-repository，项目重启 Claude 即读到最新规则，**无需重新 install**。SessionStart hook 每次会话自动 pull。
 
-项目 `CLAUDE.md` 通过相对路径 `@../ai-repository/...` 引用规范源文件。
-在 `D:\hub\ai-repository` 改动后，**项目重启 Claude Code 即自动读取最新规则**，无需重新 install 或复制。
-
-### 换电脑迁移（3 步）
+#### Kiro（手动同步到全局）
 
 ```bash
-# 1. clone ai-repository（建议与其他项目同级）
+/d/hub/ai-repository/sync.sh kiro
+
+# 同步到 ~/.kiro/（全局，对所有 Kiro 项目生效）：
+#   steering/*.md       代码风格、语言偏好
+#   hooks/*.kiro.hook   SQL 规则（原生 JSON 结构）
+#   settings/mcp.json   MCP 配置
+```
+
+**限制**：Kiro 无会话启动 hook，规范更新后需**手动重跑** `sync.sh kiro`。
+
+#### Codex（手动同步到全局）
+
+```bash
+/d/hub/ai-repository/sync.sh codex
+
+# 同步到 ~/.codex/（全局）：
+#   AGENTS.md           规范文本（用标记包裹，可重复同步不重复）
+#   config.toml         MCP 配置（JSON→TOML，安全合并，只增不删）
+```
+
+**限制**：同 Kiro，无 hook 机制，需手动重跑。
+
+### 规范更新后
+
+| Agent | 自动 pull？ | 自动应用规范？ | 手动操作 |
+|-------|:---:|:---:|---------|
+| Claude | ✅ SessionStart hook | ✅ @import 活引用 | 无（自动）|
+| Kiro | ❌ | ❌ | `sync.sh kiro` |
+| Codex | ❌ | ❌ | `sync.sh codex` |
+
+## 各工具对比
+
+| | Claude Code | Kiro | Codex |
+|---|---|---|---|
+| **规范位置** | 项目 `CLAUDE.md` | `~/.kiro/`（全局） | `~/.codex/`（全局） |
+| **引用方式** | `@import` 活引用源文件 | 静态副本 | 静态合并 |
+| **Hook** | ✅ SessionStart 自动 pull | ❌ 只有 preToolUse | ❌ 无 hook |
+| **MCP 格式** | JSON（项目 `.mcp.json`） | JSON（`~/.kiro/settings/mcp.json`） | TOML（`~/.codex/config.toml`） |
+| **同步频率** | 自动（每次会话启动） | 手动 | 手动 |
+| **项目级配置** | ✅ 完整支持 | ⚠️ 全局为主 | ⚠️ 全局为主 |
+
+## 通用规范格式
+
+- **steering 规则**：Markdown（`code_style.md`、`language.md`），所有 agent 通用
+- **工具控制规则**：`.rule.json`（JSON 结构，描述 when/then 意图），各 agent 转换为自己能理解的格式：
+  - Claude → CLAUDE.md 文本（via `hook-converter.js`）
+  - Kiro → `.kiro.hook`（原生 JSON 结构，改扩展名直接复制）
+  - Codex → AGENTS.md 文本（via `hook-converter.js`）
+
+示例 `.rule.json` 结构（与 Kiro 原生 hook 一致，但扩展名通用化）：
+
+```json
+{
+  "enabled": true,
+  "name": "MySQL SQL Guard",
+  "when": {"type": "preToolUse", "toolTypes": [".*sql.*"]},
+  "then": {"type": "askAgent", "prompt": "..."}
+}
+```
+
+## 换电脑迁移
+
+```bash
+# 1. clone
 git clone git@github.com:simonAmoury/ai-repository.git /d/hub/ai-repository
 
-# 2. 注册全局 SessionStart hook（自动写入 ~/.claude/settings.json，幂等）
-cd /d/hub/ai-repository && ./sync.sh bootstrap
+# 2. Claude 注册全局 hook（自动 pull + 活引用，一劳永逸）
+cd /d/hub/ai-repository && ./sync.sh claude bootstrap
 
-# 3. 完成。新会话自动 pull 最新规范 + 提示未推送/未接入
+# 3. Kiro/Codex 手动同步（可选，按需）
+./sync.sh kiro
+./sync.sh codex
 ```
 
-> 补充：MySQL MCP 依赖 `uvx`，换电脑需单独安装 `uv`。
-> hook 脚本自定位路径，不依赖硬编码，clone 到任意位置均可。
+Claude 换电脑两步恢复全自动化；Kiro/Codex 需首次手动同步，之后更新规范时再手动跑。
 
-## 各工具适配
+## 优势总结
 
-| 工具 | 接入方式 |
-|------|---------|
-| Claude Code | `sync.sh install .` 生成分层 CLAUDE.md + .mcp.json |
-| Kiro | `cp personal/rules/steering/* ~/.kiro/steering/` + `cp personal/rules/hooks/*.hook ~/.kiro/hooks/` |
-| Codex | 参考 `personal/mcp/`、`company/mcp/` 模板配置 |
-
-## 优先级实现原理
-
-项目 `CLAUDE.md` 结构（由 install 生成）：
-
-```markdown
-## 项目级规则（最高优先级）     ← 项目自有，覆盖下方
-(项目特有规则)
-
-## 公司规范                      ← @import ../ai-repository/company/...
-## 个人规范                      ← @import ../ai-repository/personal/...
-## Hook 规则                     ← @import .claude/hooks-rules.md
-```
-
-Claude Code 启动时递归解析 `@import`，把三层规则并入 CLAUDE.md，项目级写在最前并声明覆盖关系。
+1. **单一事实来源**：规范以通用格式存在，不偏向任何 agent
+2. **对称扩展**：加新工具（Cursor/Windsurf）只需添加对应 `sync-xxx.sh`
+3. **Claude 全自动**：@import 活引用 + SessionStart hook，改源文件即生效
+4. **Kiro/Codex 手动可控**：规范更新不会意外影响当前会话，手动同步时你知道发生了什么
+5. **安全合并**：Codex 的 TOML 合并只增不删，不破坏你手改的 config.toml
