@@ -25,7 +25,7 @@ ai-repository/
 │   │   └── settings.template.json # 个人 MCP 配置模板（脱敏）
 │   ├── rules/
 │   │   ├── steering/              # 代码风格、语言偏好（Markdown，通用）
-│   │   │   ├── code_style.md
+│   │   │   ├── java_code_style.md
 │   │   │   └── language.md
 │   │   └── hooks/                 # 工具控制规则（JSON，agent 无关）
 │   │       ├── mysql-sql-guard.rule.json
@@ -42,12 +42,12 @@ ai-repository/
 
 | 类型 | 格式 | 说明 |
 |------|------|------|
-| steering 规则 | Markdown | `code_style.md`、`language.md`,所有 agent 通用 |
-| 工具控制规则 | `.rule.json` | JSON 结构(`when`/`then` 意图),agent 无关,各工具自行解读 |
+| steering 规则 | Markdown | `java_code_style.md`、`language.md`,所有 agent 通用 |
+| 工具控制规则 | `.rule.json` | **本仓库自定义** JSON schema(`when`/`then` 意图),agent 无关,各工具自行解读 |
 | MCP 配置 | `settings.template.json` | 脱敏模板,真实凭据版本 `settings.json` 已 gitignore |
 | Skills | `SKILL.md` + 资源脚本 | Claude Code 专用 |
 
-`.rule.json` 示例结构(与 Kiro 原生 hook 一致,扩展名通用化):
+`.rule.json` 是**本仓库自定义的 schema**(参考 Kiro 原生 hook 结构,扩展名通用化),并非跨 agent 标准。示例:
 
 ```json
 {
@@ -57,6 +57,8 @@ ai-repository/
   "then": {"type": "askAgent", "prompt": "..."}
 }
 ```
+
+> 注:`when.type` 的 `preToolUse`/`postToolUse` 仅在 Claude/Kiro 能映射为真正的工具前后置 hook;Codex 无 hook 机制,只会把 `prompt` 当作纯文本规则写入。
 
 ## 接入方式
 

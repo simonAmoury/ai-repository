@@ -11,6 +11,6 @@
   },
   "then": {
     "type": "askAgent",
-    "prompt": "A SQL query was just executed via the MySQL MCP tool. Append a log entry to the file logs/sql-audit.log (relative to the current project root directory) with the following format:\n\n[YYYY-MM-DD HH:mm:ss] SQL: <the exact SQL query that was executed>\n\nExtract the SQL from the tool call that just completed. Create the logs/ directory if it doesn't exist. Use fsAppend to add the entry (or fsWrite if the file doesn't exist yet). Do NOT include the query result in the log, only the SQL statement itself."
+    "prompt": "A SQL query was just executed via the MySQL MCP tool. Append a log entry to the file logs/sql-audit.log (relative to the current project root directory) with the following format:\n\n[YYYY-MM-DD HH:mm:ss] SQL: <the exact SQL query that was executed>\n\nExtract the SQL from the tool call that just completed. Create the logs/ directory if it doesn't exist. Append the entry to the end of the file (create the file first if it does not exist). Do NOT include the query result in the log, only the SQL statement itself."
   }
 }

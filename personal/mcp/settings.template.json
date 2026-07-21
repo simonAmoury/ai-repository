@@ -1,6 +1,7 @@
 {
   "mcpServers": {
     "mysql": {
+      "type": "stdio",
       "command": "uvx",
       "args": [
         "--from",
@@ -12,13 +13,7 @@
         "MYSQL_PORT": "3306",
         "MYSQL_USER": "<your-user>",
         "MYSQL_PASSWORD": "<your-password>"
-      },
-      "disabled": false,
-      "autoApprove": [
-        "query",
-        "execute_sql"
-      ],
-      "disabledTools": []
+      }
     },
     "codegraph": {
       "type": "stdio",
