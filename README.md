@@ -1,6 +1,6 @@
 # AI Repository
 
-公用 AI 配置**内容**仓库。只存放 **规则文件 + MCP 配置 + Skills**,不含任何自动化脚本,按需手动接入各 AI 工具(Claude Code / Kiro / Codex 等)。
+公用 AI 配置**内容**仓库:以 agent 无关格式存放规则 / MCP / Skills(单一事实来源)。Claude Code 提供接入脚本 `scripts/link-claude.sh`,Kiro / Codex 手动接线。
 
 ## 分层(优先级从高到低)
 
@@ -35,6 +35,8 @@ ai-repository/
 │       ├── deploy-to-vercel/
 │       ├── find-skills/
 │       └── terminal-title/
+├── scripts/
+│   └── link-claude.sh            # Claude Code 接入脚本(项目规则/MCP + 全局 skills)
 └── README.md
 ```
 
@@ -62,9 +64,54 @@ ai-repository/
 
 ## 接入方式
 
-本仓库**不提供自动化同步脚本**,内容即文件本身。接入时直接复制/引用对应文件到各工具的配置位置,例如:
+通用规范以 agent 无关格式存放。Claude Code 有现成接入脚本,Kiro / Codex 手动接线。
 
-- **Claude Code**:steering 的 `.md` 用 `@import` 引用进 `CLAUDE.md`;`.rule.json` 的 `prompt` 作为规则文本写入;`.mcp.json` 放项目根;skills 放 `~/.claude/skills/` 或项目 `.claude/skills/`
+### 首次使用(新机器)
+
+```bash
+git clone git@github.com:simonAmoury/ai-repository.git     # 1. 克隆仓库
+# 2. Windows 用户:开启「设置 → 系统 → 开发者选项 → 开发者模式」(skills 软链接需要)
+# 3. 填好真实 MCP 凭据(本地,不提交):复制 company/mcp/settings.template.json
+#    为 company/mcp/settings.json 并填值(已 gitignore)
+bash scripts/link-claude.sh skills                          # 4. 全局装 skills(一次性)
+```
+
+### Claude Code(脚本接入)
+
+`scripts/link-claude.sh` 两个子命令:
+
+| 命令 | 作用 | 频率 |
+|---|---|---|
+| `bash scripts/link-claude.sh skills` | 把 skills 软链接到 `~/.claude/skills/`(全局,所有项目通用) | 一次性 |
+| `bash scripts/link-claude.sh [项目目录]` | 接入项目:生成 `CLAUDE.md` / `.mcp.json` / `sql-guard.json` | 每个新项目 |
+
+项目接入示例:
+
+```bash
+cd /your/project
+bash /path/to/ai-repository/scripts/link-claude.sh          # 接入当前目录
+# 或指定目录:
+bash /path/to/ai-repository/scripts/link-claude.sh /your/project
+```
+
+项目内生成物:
+
+| 文件 | 说明 |
+|---|---|
+| `CLAUDE.md` | 规则入口:项目级规则 + `@import` 公司/个人 steering + hook 规则(脚本只维护标记区,其余自由编辑) |
+| `.claude/hooks-rules.md` | `.rule.json` 自动转换结果 |
+| `.mcp.json` | MCP 配置(已 gitignore) |
+| `sql-guard.json` | SQL 白名单,按项目改 `allowedDatabases`(已 gitignore) |
+
+要点:
+
+- **动态引用**:项目 `CLAUDE.md` 用相对路径 `@../ai-repository/...` 引用仓库源文件;改仓库规范后**重启 Claude 即生效,无需重跑**。
+- **Windows 软链接**:`skills` 子命令建原生符号链接,需「开发者模式」;未开启则回退复制(可用但不同步)。
+- **MCP 凭据**:`.mcp.json` 优先读仓库里 gitignore 的真实 `company/mcp/settings.json`;缺失则用模板占位符,填好后重跑。
+- **幂等**:可重复运行;已存在的 `.mcp.json` / `sql-guard.json` 不覆盖,`CLAUDE.md` 只更新标记区。
+
+### Kiro / Codex(手动)
+
 - **Kiro**:`.rule.json` 改扩展名为 `.kiro.hook` 放 `~/.kiro/`;steering 放 `~/.kiro/steering/`
 - **Codex**:规则文本写进 `~/.codex/AGENTS.md`;MCP 合并进 `~/.codex/config.toml`
 
