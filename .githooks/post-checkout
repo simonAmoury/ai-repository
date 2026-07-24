@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+
+# 切换分支后检测 Skill 变化；单文件 checkout 不触发同步。
+[ "${3:-0}" = "1" ] || exit 0
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+
+node "$repo_root/scripts/ai-config.js" hooks sync-skills "${1:-}" "${2:-}" || {
+  printf '%s\n' '[ai-repository] Skill 自动同步失败，请手动执行 ai-config.js 的 skills 命令' >&2
+}
+
+exit 0

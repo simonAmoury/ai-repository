@@ -1,123 +1,167 @@
 # AI Repository
 
-公用 AI 配置**内容**仓库:以 agent 无关格式存放规则 / MCP / Skills(单一事实来源)。Claude Code 提供接入脚本 `scripts/link-claude.sh`,Kiro / Codex 手动接线。
+公司级与个人级 AI 配置的单一事实来源，通过统一核心转换为 Claude Code 或 Codex 所需格式。
 
-## 分层(优先级从高到低)
+## 分层与优先级
 
+```text
+项目级 > 公司级（company/） > 个人级（personal/）
 ```
-公司级(company/)  >  个人级(personal/)
-```
 
-冲突时高优先级覆盖低优先级。
+- `company/`：公司规则、MCP、Skills，优先级高于个人配置。
+- `personal/`：个人规则、MCP、Skills。
+- 同名 MCP Server 和 Skill 由公司级覆盖个人级。
+- 当前仅适配 Claude Code 与 Codex，不处理 Kiro。
 
 ## 目录结构
 
-```
+```text
 ai-repository/
-├── company/                       # 公司级规范（优先级高于 personal）
+├── .githooks/                    # Skill 变化后的用户级自动同步 Hook
+├── company/
 │   ├── mcp/
-│   │   └── settings.template.json # 公司 MCP 配置模板（脱敏）
 │   ├── rules/
-│   │   └── hooks/
-│   │       └── sql-guard.template.json
-│   └── skills/                    # 公司级 Skills（与 personal/skills 一起全局安装，同名公司级优先）
-│       └── write-online-sop/      # 上线 SOP 编写规范 + 模板
-├── personal/                      # 个人级规范
+│   └── skills/
+├── personal/
 │   ├── mcp/
-│   │   └── settings.template.json # 个人 MCP 配置模板（脱敏）
 │   ├── rules/
-│   │   ├── steering/              # 代码风格、语言偏好（Markdown，通用）
-│   │   │   ├── java_code_style.md
-│   │   │   ├── language.md
-│   │   │   └── online-sop-sync.md # 外部改动即同步上线 SOP
-│   │   └── hooks/                 # 工具控制规则（JSON，agent 无关）
-│   │       ├── mysql-sql-guard.rule.json
-│   │       ├── mysql-sql-audit-log.rule.json
-│   │       └── sql-guard.template.json
-│   └── skills/                    # Claude 专用 Skills
-│       ├── deploy-to-vercel/
-│       ├── find-skills/
-│       └── terminal-title/
+│   └── skills/
+├── src/
+│   ├── core/                 # 统一加载、合并、转换和文件处理
+│   └── adapters/             # Claude/Codex 策略适配器
 ├── scripts/
-│   └── link-claude.sh            # Claude Code 接入脚本(项目规则/MCP + 全局 skills)
-└── README.md
+│   ├── ai-config.js          # 唯一主入口
+│   └── link-claude.sh        # 旧 Claude 命令兼容入口
+└── tests/
 ```
 
-## 文件格式约定
+## 手动接入
 
-| 类型 | 格式 | 说明 |
-|------|------|------|
-| steering 规则 | Markdown | `java_code_style.md`、`language.md`,所有 agent 通用 |
-| 工具控制规则 | `.rule.json` | **本仓库自定义** JSON schema(`when`/`then` 意图),agent 无关,各工具自行解读 |
-| MCP 配置 | `settings.template.json` | 脱敏模板,真实凭据版本 `settings.json` 已 gitignore |
-| Skills | `SKILL.md` + 资源 | Claude Code 专用;`company/skills` 与 `personal/skills` 均全局安装,同名公司级优先 |
-
-`.rule.json` 是**本仓库自定义的 schema**(参考 Kiro 原生 hook 结构,扩展名通用化),并非跨 agent 标准。示例:
-
-```json
-{
-  "enabled": true,
-  "name": "MySQL SQL Guard",
-  "when": {"type": "preToolUse", "toolTypes": [".*sql.*"]},
-  "then": {"type": "askAgent", "prompt": "..."}
-}
-```
-
-> 注:`when.type` 的 `preToolUse`/`postToolUse` 仅在 Claude/Kiro 能映射为真正的工具前后置 hook;Codex 无 hook 机制,只会把 `prompt` 当作纯文本规则写入。
-
-## 接入方式
-
-通用规范以 agent 无关格式存放。Claude Code 有现成接入脚本,Kiro / Codex 手动接线。
-
-### 首次使用(新机器)
+所有操作均为手动执行，不注册会话 Hook，不自动拉取或同步。
 
 ```bash
-git clone git@github.com:simonAmoury/ai-repository.git     # 1. 克隆仓库
-# 2. Windows 用户:开启「设置 → 系统 → 开发者选项 → 开发者模式」(skills 软链接需要)
-# 3. 填好真实 MCP 凭据(本地,不提交):复制 company/mcp/settings.template.json
-#    为 company/mcp/settings.json 并填值(已 gitignore)
-bash scripts/link-claude.sh skills                          # 4. 全局装 skills(一次性)
+# Claude：用户级安装 Skills
+node scripts/ai-config.js claude skills
+
+# Claude：接入项目
+node scripts/ai-config.js claude install /path/to/project
+
+# Codex：用户级安装 Skills
+node scripts/ai-config.js codex skills
+
+# Codex：接入项目
+node scripts/ai-config.js codex install /path/to/project
 ```
 
-### Claude Code(脚本接入)
-
-`scripts/link-claude.sh` 两个子命令:
-
-| 命令 | 作用 | 频率 |
-|---|---|---|
-| `bash scripts/link-claude.sh skills` | 把 `company/skills` + `personal/skills` 软链接到 `~/.claude/skills/`(全局,所有项目通用;同名公司级优先) | 一次性 |
-| `bash scripts/link-claude.sh [项目目录]` | 接入项目:生成 `CLAUDE.md` / `.mcp.json` / `sql-guard.json` | 每个新项目 |
-
-项目接入示例:
+不传项目目录时可显式使用当前目录：
 
 ```bash
-cd /your/project
-bash /path/to/ai-repository/scripts/link-claude.sh          # 接入当前目录
-# 或指定目录:
-bash /path/to/ai-repository/scripts/link-claude.sh /your/project
+node /path/to/ai-repository/scripts/ai-config.js codex install .
 ```
 
-项目内生成物:
+### Windows 使用示例
 
-| 文件 | 说明 |
+假设配置仓库位于 `D:\hub\ai-repository`，需要接入的项目位于 `D:\hub\awswaf`，可在 PowerShell 中执行：
+
+```powershell
+# 用户级安装 Claude Skills：写入当前用户的 ~/.claude/skills，通常每台机器只需执行一次
+node D:\hub\ai-repository\scripts\ai-config.js claude skills
+
+# 用户级安装 Codex Skills：写入当前用户的 ~/.agents/skills，通常每台机器只需执行一次
+node D:\hub\ai-repository\scripts\ai-config.js codex skills
+
+# 将 Claude 项目配置接入 D:\hub\awswaf
+node D:\hub\ai-repository\scripts\ai-config.js claude install D:\hub\awswaf
+
+# 将 Codex 项目配置接入 D:\hub\awswaf
+node D:\hub\ai-repository\scripts\ai-config.js codex install D:\hub\awswaf
+```
+
+如果只使用 Codex，只需执行 `codex skills` 和 `codex install` 两条命令。`skills` 是用户级安装，不会写入 `D:\hub\awswaf`；`install` 才会在目标项目中生成或更新 Agent 配置。
+
+## Skill 更新自动同步
+
+首次完成用户级 Skill 安装后，在 `ai-repository` 根目录执行一次：
+
+```powershell
+node scripts\ai-config.js hooks install
+```
+
+该命令为当前仓库设置 `core.hooksPath=.githooks`。注册后，以下 Git 操作如果修改了 `company/skills/` 或 `personal/skills/`，会自动刷新用户级 Skills：
+
+- `git pull` / `git merge`；
+- 切换分支；
+- 本地提交 Skill 变更。
+
+同步规则：
+
+- 已安装 `~/.claude/skills` 时同步 Claude；
+- 已安装 `~/.agents/skills` 时同步 Codex；
+- 未使用过的 Agent 不会被自动安装；
+- 软链接 Skill 会重建链接；复制回退的 Skill 通过受管清单安全更新；
+- 仅普通代码或文档变化时不会触发 Skill 同步；
+- 自动同步失败只输出警告，不会阻断 Git 操作。
+
+如果仓库已经配置了其他 `core.hooksPath`，安装命令会停止并提示冲突，不会覆盖已有 Hook。
+
+## Claude 策略
+
+### Skills
+
+Claude Skills 安装到用户级 `~/.claude/skills/`：
+
+- 优先创建指向本仓库 Skill 目录的链接；
+- 链接失败时回退为复制；
+- 已存在且不是链接的同名目录会保留，不覆盖。
+
+Skills 不使用 `@import`，也不安装到项目 `.claude/skills/`。
+
+### 项目生成物
+
+| 文件 | 作用 |
 |---|---|
-| `CLAUDE.md` | 规则入口:项目级规则 + `@import` 公司/个人 steering + hook 规则(脚本只维护标记区,其余自由编辑) |
-| `.claude/hooks-rules.md` | `.rule.json` 自动转换结果 |
-| `.mcp.json` | MCP 配置(已 gitignore) |
-| `sql-guard.json` | SQL 白名单,按项目改 `allowedDatabases`(已 gitignore) |
+| `CLAUDE.md` | 项目规则入口；托管区通过 `@import` 动态引用本仓库 steering |
+| `.claude/hooks-rules.md` | `.rule.json` 转换后的文本规则 |
+| `.mcp.json` | 项目 MCP 配置，已存在时不覆盖 |
+| `sql-guard.json` | SQL 白名单模板，已存在时不覆盖 |
 
-要点:
+原有命令继续可用：
 
-- **动态引用**:项目 `CLAUDE.md` 用相对路径 `@../ai-repository/...` 引用仓库源文件;改仓库规范后**重启 Claude 即生效,无需重跑**。
-- **Windows 软链接**:`skills` 子命令建原生符号链接,需「开发者模式」;未开启则回退复制(可用但不同步)。
-- **MCP 凭据**:`.mcp.json` 优先读仓库里 gitignore 的真实 `company/mcp/settings.json`;缺失则用模板占位符,填好后重跑。
-- **幂等**:可重复运行;已存在的 `.mcp.json` / `sql-guard.json` 不覆盖,`CLAUDE.md` 只更新标记区。
+```bash
+bash scripts/link-claude.sh skills
+bash scripts/link-claude.sh /path/to/project
+```
 
-### Kiro / Codex(手动)
+## Codex 策略
 
-- **Kiro**:`.rule.json` 改扩展名为 `.kiro.hook` 放 `~/.kiro/`;steering 放 `~/.kiro/steering/`
-- **Codex**:规则文本写进 `~/.codex/AGENTS.md`;MCP 合并进 `~/.codex/config.toml`
+### Skills
 
-## 安全
+Codex Skills 安装到用户级 `~/.agents/skills/`，链接及覆盖策略与 Claude 一致。
 
-真实凭据文件(`**/mcp/settings.json`、`**/sql-guard.json`)已在 `.gitignore` 中,仓库只保留 `*.template.json` 脱敏模板。
+### 项目生成物
+
+| 文件 | 作用 |
+|---|---|
+| `AGENTS.md` | 写入完整公司/个人规则；只更新 ai-repository 托管区 |
+| `.codex/config.toml` | 项目级 MCP 配置；只更新 MCP 托管区 |
+| `sql-guard.json` | SQL 白名单模板，已存在时不覆盖 |
+
+Codex 不支持本仓库使用的 Claude `@import` 接线方式，因此规则源变更后需要重新执行一次 `codex install`。Skill 使用目录链接时无需重装。
+
+如果 `.codex/config.toml` 已有项目手写的同名 MCP Server，脚本会保留手写配置并跳过该 Server。
+
+## MCP 与凭据
+
+- 每层优先读取被 Git 忽略的 `mcp/settings.json`，缺失时读取 `settings.template.json`。
+- 先加载个人 MCP，再以公司同名 Server 覆盖。
+- Claude 输出 `.mcp.json`；Codex 输出 `.codex/config.toml`。
+- MCP 配置和 `sql-guard.json` 会加入目标项目的 `.git/info/exclude`，不会修改项目 `.gitignore`。
+- 不要把真实凭据提交到仓库。
+
+## 测试
+
+```bash
+node --test tests/ai-config.test.js
+```
+
+测试覆盖 Claude 兼容生成物、两种用户级 Skill 目录、Codex 生成物、幂等更新、手写规则保留和 MCP 冲突保护。

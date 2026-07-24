@@ -11,15 +11,15 @@ personal/
 ├── rules/
 │   ├── steering/                # 代码风格、语言偏好（Markdown，通用）
 │   └── hooks/                   # 工具控制规则（.rule.json，agent 无关）
-└── skills/                      # Claude 专用 Skills
+└── skills/                      # Agent Skills（Claude/Codex 共用）
     ├── deploy-to-vercel/
     ├── find-skills/
     └── terminal-title/
 ```
 
-## 内容来源
+## 接入目标
 
-| 来源 | 内容 |
+| Agent | 目标位置 |
 |------|------|
-| `~/.claude` | skills/(deploy-to-vercel, find-skills, terminal-title) |
-| `~/.kiro` | rules/steering/(代码规范、语言偏好)、rules/hooks/(SQL 规则) |
+| Claude | Skills → `~/.claude/skills`；规则 → 项目 `CLAUDE.md` |
+| Codex | Skills → `~/.agents/skills`；规则 → 项目 `AGENTS.md` |

@@ -1,6 +1,6 @@
 ---
 name: terminal-title
-description: Automatically updates terminal window title to reflect the current high-level task. Use at the start of every Claude Code session when the user provides their first prompt, and whenever the user switches to a distinctly new high-level task. Helps developers manage multiple Claude Code terminals by providing clear, at-a-glance identification of what each terminal is working on.
+description: Automatically updates the terminal window title to reflect the current high-level task. Use at the start of every terminal-based coding-agent session and whenever the user switches to a distinctly new high-level task.
 min_claude_code_version: "1.0.0"
 version: "1.1.0"
 ---
@@ -9,12 +9,12 @@ version: "1.1.0"
 
 ## Overview
 
-Automatically sets descriptive terminal window titles based on the task Claude is working on. Essential for developers running multiple Claude Code instances who need to quickly identify which terminal is handling which task.
+Automatically sets descriptive terminal window titles based on the current coding task. Useful when running multiple coding-agent terminals at the same time.
 
 ## When to Use
 
 **Always trigger this skill:**
-- At the start of every new Claude Code session (after receiving the first user prompt)
+- At the start of every new terminal-based coding-agent session (after receiving the first user prompt)
 - When switching to a substantially different task (e.g., from "API Integration" to "Database Migration")
 
 **Trigger on task switches like these:**
