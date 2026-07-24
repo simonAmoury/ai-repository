@@ -8,9 +8,11 @@
 company/
 ├── mcp/
 │   └── settings.template.json   # 公司 MCP 配置模板（脱敏）
-└── rules/
-    └── hooks/
-        └── sql-guard.template.json
+├── rules/
+│   └── hooks/
+│       └── sql-guard.template.json
+└── skills/                      # 公司级 Skills（全局安装，同名优先于 personal）
+    └── write-online-sop/        # 上线 SOP 编写规范 + 模板
 ```
 
 ## 使用原则

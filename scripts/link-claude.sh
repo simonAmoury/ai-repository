@@ -10,8 +10,9 @@
 #                                     对所有项目生效。装一次即可。
 #
 # 为什么 skills 单独走全局:
-#   deploy-to-vercel / find-skills / terminal-title 是通用能力,放 ~/.claude/skills/
+#   deploy-to-vercel / find-skills / terminal-title 等是通用能力,放 ~/.claude/skills/
 #   装一次,所有项目共享;无需每个项目重复链接或复制。
+#   同时扫描 company/skills 与 personal/skills;同名时公司级优先(先装占位,personal 跳过)。
 #
 # 接入策略(项目接入,混合方案,兼顾"动态"与 Windows 兼容):
 #   - steering 规则 + 转换后的 hook 规则 → 写进 CLAUDE.md 的 @import(相对路径,动态;
@@ -78,15 +79,22 @@ cmd_skills() {
   step "仓库: $AI_REPO_DIR"
 
   local linked=0 copied=0 skipped=0
+  declare -A installed_this_run=()                     # 记录本次已装 skill 名,用于公司级优先
   shopt -s nullglob
-  for d in "$AI_REPO_DIR"/personal/skills/*/; do
+  # company/skills 先装(公司级优先),personal/skills 后装。同名时后者跳过,保住先装的公司级——
+  # 符合仓库分层约定「company > personal」。
+  for d in "$AI_REPO_DIR"/company/skills/*/ "$AI_REPO_DIR"/personal/skills/*/; do
     d="${d%/}"
     [ -d "$d" ] || continue
     local name target
     name="$(basename "$d")"
     target="$dest/$name"
+    if [ -n "${installed_this_run[$name]:-}" ]; then
+      warn "$name 已由更高优先级层安装,跳过(公司级优先)"
+      skipped=$((skipped+1)); continue
+    fi
     if [ -L "$target" ]; then
-      rm -f "$target"                                  # 旧软链接,重建
+      rm -f "$target"                                  # 上次遗留的软链接,重建
     elif [ -e "$target" ]; then
       warn "$name 已存在且非软链接,跳过(保留你的内容)"
       skipped=$((skipped+1)); continue
@@ -100,6 +108,7 @@ cmd_skills() {
       warn "  复制 $name(ln -s 未生效;Windows 请开启「开发者模式」后重跑改为真软链接)"
       copied=$((copied+1))
     fi
+    installed_this_run[$name]=1
   done
   shopt -u nullglob
 

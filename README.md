@@ -17,16 +17,19 @@ ai-repository/
 ├── company/                       # 公司级规范（优先级高于 personal）
 │   ├── mcp/
 │   │   └── settings.template.json # 公司 MCP 配置模板（脱敏）
-│   └── rules/
-│       └── hooks/
-│           └── sql-guard.template.json
+│   ├── rules/
+│   │   └── hooks/
+│   │       └── sql-guard.template.json
+│   └── skills/                    # 公司级 Skills（与 personal/skills 一起全局安装，同名公司级优先）
+│       └── write-online-sop/      # 上线 SOP 编写规范 + 模板
 ├── personal/                      # 个人级规范
 │   ├── mcp/
 │   │   └── settings.template.json # 个人 MCP 配置模板（脱敏）
 │   ├── rules/
 │   │   ├── steering/              # 代码风格、语言偏好（Markdown，通用）
 │   │   │   ├── java_code_style.md
-│   │   │   └── language.md
+│   │   │   ├── language.md
+│   │   │   └── online-sop-sync.md # 外部改动即同步上线 SOP
 │   │   └── hooks/                 # 工具控制规则（JSON，agent 无关）
 │   │       ├── mysql-sql-guard.rule.json
 │   │       ├── mysql-sql-audit-log.rule.json
@@ -47,7 +50,7 @@ ai-repository/
 | steering 规则 | Markdown | `java_code_style.md`、`language.md`,所有 agent 通用 |
 | 工具控制规则 | `.rule.json` | **本仓库自定义** JSON schema(`when`/`then` 意图),agent 无关,各工具自行解读 |
 | MCP 配置 | `settings.template.json` | 脱敏模板,真实凭据版本 `settings.json` 已 gitignore |
-| Skills | `SKILL.md` + 资源脚本 | Claude Code 专用 |
+| Skills | `SKILL.md` + 资源 | Claude Code 专用;`company/skills` 与 `personal/skills` 均全局安装,同名公司级优先 |
 
 `.rule.json` 是**本仓库自定义的 schema**(参考 Kiro 原生 hook 结构,扩展名通用化),并非跨 agent 标准。示例:
 
@@ -82,7 +85,7 @@ bash scripts/link-claude.sh skills                          # 4. 全局装 skill
 
 | 命令 | 作用 | 频率 |
 |---|---|---|
-| `bash scripts/link-claude.sh skills` | 把 skills 软链接到 `~/.claude/skills/`(全局,所有项目通用) | 一次性 |
+| `bash scripts/link-claude.sh skills` | 把 `company/skills` + `personal/skills` 软链接到 `~/.claude/skills/`(全局,所有项目通用;同名公司级优先) | 一次性 |
 | `bash scripts/link-claude.sh [项目目录]` | 接入项目:生成 `CLAUDE.md` / `.mcp.json` / `sql-guard.json` | 每个新项目 |
 
 项目接入示例:
