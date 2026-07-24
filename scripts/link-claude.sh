@@ -132,6 +132,32 @@ cmd_project() {
   mkdir -p "$project_dir/.claude"
 
   # ------------------------------------------------------------
+  # 解析本地忽略文件 .git/info/exclude(仅本地生效,不提交;比 .gitignore 更适合含凭据的文件)
+  #   - 优先用 git rev-parse,兼容 worktree/submodule(此时 .git 是文件而非目录)
+  #   - 无 git 时回退到 .git/info/exclude;非 git 仓库则跳过并告警
+  # ------------------------------------------------------------
+  local exclude_file=""
+  if command -v git >/dev/null 2>&1 && git -C "$project_dir" rev-parse --git-dir >/dev/null 2>&1; then
+    local gp; gp="$(git -C "$project_dir" rev-parse --git-path info/exclude)"
+    case "$gp" in /*) exclude_file="$gp" ;; *) exclude_file="$project_dir/$gp" ;; esac
+  elif [ -d "$project_dir/.git" ]; then
+    exclude_file="$project_dir/.git/info/exclude"
+  fi
+  if [ -n "$exclude_file" ]; then
+    mkdir -p "$(dirname "$exclude_file")"
+    touch "$exclude_file"
+  else
+    warn "项目非 git 仓库,跳过本地忽略配置(.mcp.json / sql-guard.json 请勿手动提交)"
+  fi
+
+  # 幂等追加一条本地忽略(整行精确匹配,已存在则跳过)
+  add_local_ignore() {
+    local pattern="$1" comment="$2"
+    [ -n "$exclude_file" ] || return 0
+    grep -qxF "$pattern" "$exclude_file" || printf '\n# %s\n%s\n' "$comment" "$pattern" >> "$exclude_file"
+  }
+
+  # ------------------------------------------------------------
   # 1) 生成 CLAUDE.md(管理 @import)+ .claude/hooks-rules.md(.rule.json 转换)
   # ------------------------------------------------------------
   step "生成 CLAUDE.md 与 hooks-rules.md..."
@@ -307,10 +333,8 @@ NODE_EOF
     fi
   fi
 
-  # .mcp.json 加入项目 .gitignore(含凭据)
-  local gi="$project_dir/.gitignore"
-  touch "$gi"
-  grep -qxF '.mcp.json' "$gi" || printf '\n# MCP 配置（含凭据，勿提交）\n.mcp.json\n' >> "$gi"
+  # .mcp.json 加入本地忽略 .git/info/exclude(含凭据)
+  add_local_ignore '.mcp.json' 'MCP 配置（含凭据，勿提交）'
 
   # ------------------------------------------------------------
   # 3) sql-guard.json:落地生成(SQL guard 规则依赖它)
@@ -331,7 +355,7 @@ NODE_EOF
       info "已生成 sql-guard.json(请按项目修改 allowedDatabases)"
     fi
   fi
-  grep -qxF 'sql-guard.json' "$gi" || printf '\n# SQL 白名单（可能含真实库名）\nsql-guard.json\n' >> "$gi"
+  add_local_ignore 'sql-guard.json' 'SQL 白名单（可能含真实库名）'
 
   # ------------------------------------------------------------
   # 完成
@@ -340,8 +364,8 @@ NODE_EOF
   step "完成。项目已接入 ai-repository。生成/更新:"
   echo "  - $project_dir/CLAUDE.md             规则入口(项目级 + @import 公司/个人规范 + hook 规则)"
   echo "  - $project_dir/.claude/hooks-rules.md    .rule.json 转换结果"
-  echo "  - $project_dir/.mcp.json             MCP(已 gitignore)"
-  echo "  - $project_dir/sql-guard.json        SQL 白名单(已 gitignore)"
+  echo "  - $project_dir/.mcp.json             MCP(已加入 .git/info/exclude 本地忽略)"
+  echo "  - $project_dir/sql-guard.json        SQL 白名单(已加入 .git/info/exclude 本地忽略)"
   echo ""
   info "重启 Claude Code 即读取最新规则;改仓库规范无需重跑(@import 自动生效)。"
   info "skills 请用「全局安装」: bash link-claude.sh skills(一次装,所有项目通用)"
