@@ -30,14 +30,35 @@ ai-repository/
 │   ├── core/                 # 统一加载、合并、转换和文件处理
 │   └── adapters/             # Claude/Codex 策略适配器
 ├── scripts/
-│   ├── ai-config.js          # 唯一主入口
-│   └── link-claude.sh        # 旧 Claude 命令兼容入口
+│   └── ai-config.js          # 唯一入口
 └── tests/
 ```
 
+## 新机器首次配置
+
+Git 不会随仓库自动启用已提交的 `.githooks`。因此，每次在新机器首次克隆 `ai-repository` 后，需要完成一次用户级 Skill 安装和 Hook 注册：
+
+```powershell
+git clone git@github.com:simonAmoury/ai-repository.git D:\hub\ai-repository
+cd D:\hub\ai-repository
+
+# 创建本机公司级 MCP 真实配置，并填写主机、用户名、密码等真实值
+Copy-Item company\mcp\settings.template.json company\mcp\settings.json
+# 编辑 company\mcp\settings.json 后，再执行任何项目 install
+
+# 按实际使用的 Agent 安装用户级 Skills；不使用的 Agent 可以跳过
+node scripts\ai-config.js claude skills
+node scripts\ai-config.js codex skills
+
+# 为当前 ai-repository 启用 Skill 自动同步 Hook
+node scripts\ai-config.js hooks install
+```
+
+`hooks install` 会把 `core.hooksPath=.githooks` 写入当前仓库的本地 `.git/config`。该配置不会提交到远端，所以每台新机器、每份新克隆都需要执行一次；同一份仓库无需重复执行。
+
 ## 手动接入
 
-所有操作均为手动执行，不注册会话 Hook，不自动拉取或同步。
+Claude/Codex 项目接入均为手动执行，不注册 Agent 会话 Hook，也不会自动拉取仓库。用户级 Skill 的 Git 变更自动同步见后文。
 
 ```bash
 # Claude：用户级安装 Skills
@@ -125,13 +146,6 @@ Skills 不使用 `@import`，也不安装到项目 `.claude/skills/`。
 | `.mcp.json` | 项目 MCP 配置，已存在时不覆盖 |
 | `sql-guard.json` | SQL 白名单模板，已存在时不覆盖 |
 
-原有命令继续可用：
-
-```bash
-bash scripts/link-claude.sh skills
-bash scripts/link-claude.sh /path/to/project
-```
-
 ## Codex 策略
 
 ### Skills
@@ -152,11 +166,48 @@ Codex 不支持本仓库使用的 Claude `@import` 接线方式，因此规则�
 
 ## MCP 与凭据
 
+- 新机器首次使用时，先复制公司级模板：
+
+  ```powershell
+  Copy-Item company\mcp\settings.template.json company\mcp\settings.json
+  ```
+
+- 打开 `company/mcp/settings.json`，将 `<your-host>`、`<your-user>`、`<your-password>` 等占位符替换为本机真实配置，然后再执行 Claude/Codex 的项目 `install`。
+- `company/mcp/settings.json` 已被 Git 忽略，只保存在本机；远端只保留脱敏的 `settings.template.json`。
 - 每层优先读取被 Git 忽略的 `mcp/settings.json`，缺失时读取 `settings.template.json`。
 - 先加载个人 MCP，再以公司同名 Server 覆盖。
 - Claude 输出 `.mcp.json`；Codex 输出 `.codex/config.toml`。
 - MCP 配置和 `sql-guard.json` 会加入目标项目的 `.git/info/exclude`，不会修改项目 `.gitignore`。
 - 不要把真实凭据提交到仓库。
+
+### Claude MCP 同步
+
+执行 `claude install` 时，脚本会登记由 `ai-repository` 生成、或与当前源配置一致的项目 `.mcp.json`。登记表保存在本机的 `.ai-repository-local/mcp-projects.json`，已被 Git 忽略且不保存 MCP 凭据。
+
+更新 `company/mcp/settings.json` 后，可以同步单个项目：
+
+```powershell
+node scripts\ai-config.js claude mcp-sync D:\hub\pac-platform
+```
+
+也可以同步所有已登记项目：
+
+```powershell
+node scripts\ai-config.js claude mcp-sync --all
+```
+
+安全规则：
+
+- 同步前校验上次生成内容的 SHA-256 摘要；
+- 如果项目 `.mcp.json` 被手工修改，默认拒绝覆盖；
+- 未受管且与当前源配置不同的 `.mcp.json` 默认拒绝覆盖；
+- 确认以公司/个人合并配置覆盖项目文件时，可显式增加 `--force`；
+- `--all` 只处理执行过 `claude install` 并已成功登记的项目。
+
+```powershell
+node scripts\ai-config.js claude mcp-sync D:\hub\pac-platform --force
+node scripts\ai-config.js claude mcp-sync --all --force
+```
 
 ## 测试
 

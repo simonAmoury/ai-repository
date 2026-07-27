@@ -14,6 +14,9 @@ Thumbs.db
 # Logs
 *.log
 
+# Local state
+/.ai-repository-local/
+
 # Archives (skill 内的 Archive.zip 除外)
 *.zip
 !skills/**/Archive.zip

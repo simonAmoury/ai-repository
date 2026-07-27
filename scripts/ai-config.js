@@ -15,6 +15,8 @@ function usage() {
 用法:
   node scripts/ai-config.js claude skills
   node scripts/ai-config.js claude install [项目目录]
+  node scripts/ai-config.js claude mcp-sync <项目目录> [--force]
+  node scripts/ai-config.js claude mcp-sync --all [--force]
   node scripts/ai-config.js codex skills
   node scripts/ai-config.js codex install [项目目录]
   node scripts/ai-config.js hooks install
@@ -71,7 +73,16 @@ function main(argv) {
   if (!adapter) throw new Error(`不支持的 Agent: ${agentName}（仅支持 claude、codex）`);
   if (action === "skills") adapter.installSkills();
   else if (action === "install") adapter.installProject(args[0] || process.cwd());
-  else throw new Error(`不支持的操作: ${action}（仅支持 install、skills）`);
+  else if (action === "mcp-sync" && agentName.toLowerCase() === "claude") {
+    const force = args.includes("--force");
+    if (args.includes("--all")) {
+      const result = adapter.syncAllMcp({ force });
+      if (result.failed.length) throw new Error(`${result.failed.length} 个项目 MCP 同步失败`);
+    } else {
+      const project = args.find((value) => value !== "--force") || process.cwd();
+      adapter.syncMcpProject(project, { force });
+    }
+  } else throw new Error(`不支持的操作: ${action}`);
 }
 
 try {

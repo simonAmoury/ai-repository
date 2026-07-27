@@ -1,9 +1,10 @@
 "use strict";
 
 class AgentAdapter {
-  constructor({ repository, homeDir, output = console }) {
+  constructor({ repository, homeDir, localStateDir = null, output = console }) {
     this.repository = repository;
     this.homeDir = homeDir;
+    this.localStateDir = localStateDir;
     this.output = output;
   }
 

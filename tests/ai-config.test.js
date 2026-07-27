@@ -21,7 +21,7 @@ function workspace(t) {
   fs.mkdirSync(home, { recursive: true });
   fs.mkdirSync(project, { recursive: true });
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  return { home, project };
+  return { root, home, project };
 }
 
 function silentOutput() {
@@ -51,6 +51,7 @@ test("Claude 适配保持原入口、用户级 Skills 与项目生成物", (t) =
   const adapter = new ClaudeAdapter({
     repository: new RepositoryConfig(repositoryRoot),
     homeDir: home,
+    localStateDir: path.join(home, "state"),
     output: silentOutput(),
   });
 
@@ -177,4 +178,94 @@ test("Git Hook 只识别 Skill 路径变化并可安全安装", (t) => {
   const installed = installGitHooks(project);
   assert.equal(installed.hooksPath, ".githooks");
   assert.equal(git(project, "config", "--local", "--get", "core.hooksPath"), ".githooks");
+});
+
+function createMcpRepository(root, host) {
+  const companyMcp = path.join(root, "company", "mcp");
+  fs.mkdirSync(companyMcp, { recursive: true });
+  fs.writeFileSync(path.join(companyMcp, "settings.json"), JSON.stringify({
+    mcpServers: {
+      demo: {
+        type: "stdio",
+        command: "demo-mcp",
+        env: { DEMO_HOST: host },
+      },
+    },
+  }, null, 2), "utf8");
+}
+
+test("Claude MCP 单项目同步会登记摘要并阻止覆盖手工修改", (t) => {
+  const { root, home, project } = workspace(t);
+  const source = path.join(root, "repository");
+  const state = path.join(root, "state");
+  createMcpRepository(source, "host-one");
+
+  let adapter = new ClaudeAdapter({
+    repository: new RepositoryConfig(source),
+    homeDir: home,
+    localStateDir: state,
+    output: silentOutput(),
+  });
+  adapter.installProject(project);
+  const mcpFile = path.join(project, ".mcp.json");
+  assert.equal(JSON.parse(fs.readFileSync(mcpFile, "utf8")).mcpServers.demo.env.DEMO_HOST, "host-one");
+
+  createMcpRepository(source, "host-two");
+  adapter = new ClaudeAdapter({
+    repository: new RepositoryConfig(source),
+    homeDir: home,
+    localStateDir: state,
+    output: silentOutput(),
+  });
+  adapter.syncMcpProject(project);
+  assert.equal(JSON.parse(fs.readFileSync(mcpFile, "utf8")).mcpServers.demo.env.DEMO_HOST, "host-two");
+
+  fs.writeFileSync(mcpFile, JSON.stringify({ manuallyChanged: true }), "utf8");
+  createMcpRepository(source, "host-three");
+  adapter = new ClaudeAdapter({
+    repository: new RepositoryConfig(source),
+    homeDir: home,
+    localStateDir: state,
+    output: silentOutput(),
+  });
+  assert.throws(() => adapter.syncMcpProject(project), /已被手工修改/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(mcpFile, "utf8")), { manuallyChanged: true });
+
+  adapter.syncMcpProject(project, { force: true });
+  assert.equal(JSON.parse(fs.readFileSync(mcpFile, "utf8")).mcpServers.demo.env.DEMO_HOST, "host-three");
+});
+
+test("Claude MCP --all 同步所有已登记项目", (t) => {
+  const { root, home } = workspace(t);
+  const source = path.join(root, "repository");
+  const state = path.join(root, "state");
+  const projectOne = path.join(root, "project-one");
+  const projectTwo = path.join(root, "project-two");
+  fs.mkdirSync(projectOne);
+  fs.mkdirSync(projectTwo);
+  createMcpRepository(source, "before");
+
+  let adapter = new ClaudeAdapter({
+    repository: new RepositoryConfig(source),
+    homeDir: home,
+    localStateDir: state,
+    output: silentOutput(),
+  });
+  adapter.installProject(projectOne);
+  adapter.installProject(projectTwo);
+
+  createMcpRepository(source, "after");
+  adapter = new ClaudeAdapter({
+    repository: new RepositoryConfig(source),
+    homeDir: home,
+    localStateDir: state,
+    output: silentOutput(),
+  });
+  const result = adapter.syncAllMcp();
+  assert.equal(result.synced.length, 2);
+  assert.equal(result.failed.length, 0);
+  for (const project of [projectOne, projectTwo]) {
+    const value = JSON.parse(fs.readFileSync(path.join(project, ".mcp.json"), "utf8"));
+    assert.equal(value.mcpServers.demo.env.DEMO_HOST, "after");
+  }
 });
