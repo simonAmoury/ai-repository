@@ -9,8 +9,10 @@ const test = require("node:test");
 const { RepositoryConfig } = require("../src/core/repository-config");
 const { changedSkillFiles, installGitHooks } = require("../src/core/git-hooks");
 const { installSkills, MANIFEST } = require("../src/core/skill-installer");
+const { ensureScaffold, status: memoryStatus, memoryRoot } = require("../src/core/memory-store");
 const { ClaudeAdapter } = require("../src/adapters/claude-adapter");
 const { CodexAdapter } = require("../src/adapters/codex-adapter");
+const { KiroAdapter } = require("../src/adapters/kiro-adapter");
 
 const repositoryRoot = path.resolve(__dirname, "..");
 
@@ -101,6 +103,49 @@ test("Codex 适配生成 AGENTS.md、项目 MCP 与用户级 Skills", (t) => {
   const skills = adapter.installSkills();
   assert.equal(skills.destination, path.join(home, ".agents", "skills"));
   assert.ok(fs.existsSync(path.join(skills.destination, "write-online-sop", "SKILL.md")));
+});
+
+test("Kiro 适配生成项目 steering、项目 MCP 与用户级 Skills", (t) => {
+  const { home, project } = workspace(t);
+  const adapter = new KiroAdapter({
+    repository: new RepositoryConfig(repositoryRoot),
+    homeDir: home,
+    output: silentOutput(),
+  });
+
+  adapter.installProject(project);
+  const steeringFile = path.join(project, ".kiro", "steering", "ai-repository.md");
+  const first = fs.readFileSync(steeringFile, "utf8");
+  assert.match(first, /ai-repository:begin/);
+  assert.match(first, /全部都用中文提问、回答我/);
+  assert.match(first, /MySQL SQL Guard/);
+  assert.ok(fs.existsSync(path.join(project, ".kiro", "settings", "mcp.json")));
+  assert.ok(fs.existsSync(path.join(project, "sql-guard.json")));
+
+  fs.appendFileSync(steeringFile, "\n## 项目手写规则\n保留我\n", "utf8");
+  adapter.installProject(project);
+  const second = fs.readFileSync(steeringFile, "utf8");
+  assert.equal((second.match(/ai-repository:begin/g) || []).length, 1);
+  assert.match(second, /## 项目手写规则\n保留我/);
+
+  const skills = adapter.installSkills();
+  assert.equal(skills.destination, path.join(home, ".kiro", "skills"));
+  assert.ok(fs.existsSync(path.join(skills.destination, "write-online-sop", "SKILL.md")));
+});
+
+test("Kiro 不覆盖项目已有的 MCP 配置", (t) => {
+  const { home, project } = workspace(t);
+  const mcpFile = path.join(project, ".kiro", "settings", "mcp.json");
+  fs.mkdirSync(path.dirname(mcpFile), { recursive: true });
+  fs.writeFileSync(mcpFile, JSON.stringify({ mcpServers: { mysql: { command: "custom-mysql" } } }), "utf8");
+  const adapter = new KiroAdapter({
+    repository: new RepositoryConfig(repositoryRoot),
+    homeDir: home,
+    output: silentOutput(),
+  });
+
+  adapter.installProject(project);
+  assert.equal(JSON.parse(fs.readFileSync(mcpFile, "utf8")).mcpServers.mysql.command, "custom-mysql");
 });
 
 test("Codex 不覆盖项目手写的同名 MCP", (t) => {
@@ -233,6 +278,49 @@ test("Claude MCP 单项目同步会登记摘要并阻止覆盖手工修改", (t)
 
   adapter.syncMcpProject(project, { force: true });
   assert.equal(JSON.parse(fs.readFileSync(mcpFile, "utf8")).mcpServers.demo.env.DEMO_HOST, "host-three");
+});
+
+test("记忆库骨架幂等创建且项目级记忆被忽略", (t) => {
+  const { root } = workspace(t);
+  const repo = path.join(root, "repository");
+  fs.mkdirSync(repo, { recursive: true });
+
+  const first = ensureScaffold(repo);
+  assert.equal(first.root, memoryRoot(repo));
+  assert.ok(first.created.includes(".gitignore"));
+  assert.ok(fs.existsSync(path.join(first.root, "global", "lessons.md")));
+  assert.ok(fs.existsSync(path.join(first.root, "projects", ".gitkeep")));
+
+  const gitignore = fs.readFileSync(path.join(first.root, ".gitignore"), "utf8");
+  assert.match(gitignore, /\/projects\/\*/);
+  assert.match(gitignore, /!\/projects\/\.gitkeep/);
+
+  fs.writeFileSync(path.join(first.root, "global", "lessons.md"), "custom", "utf8");
+  const second = ensureScaffold(repo);
+  assert.deepEqual(second.created, []);
+  assert.equal(fs.readFileSync(path.join(first.root, "global", "lessons.md"), "utf8"), "custom");
+});
+
+test("记忆库 status 统计教训条目与项目记忆", (t) => {
+  const { root } = workspace(t);
+  const repo = path.join(root, "repository");
+  fs.mkdirSync(repo, { recursive: true });
+  ensureScaffold(repo);
+  const store = memoryRoot(repo);
+
+  fs.writeFileSync(
+    path.join(store, "global", "lessons.md"),
+    "# 全局教训\n\n### L-001 甲\n\n### L-002 乙\n",
+    "utf8",
+  );
+  const projectDir = path.join(store, "projects", "demo-project");
+  fs.mkdirSync(projectDir, { recursive: true });
+  fs.writeFileSync(path.join(projectDir, "feature-a.md"), "---\n---\n", "utf8");
+
+  const result = memoryStatus(repo);
+  assert.equal(result.exists, true);
+  assert.equal(result.lessons, 2);
+  assert.deepEqual(result.projects, [{ project: "demo-project", memories: ["feature-a.md"] }]);
 });
 
 test("Claude MCP --all 同步所有已登记项目", (t) => {

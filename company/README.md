@@ -9,6 +9,8 @@ company/
 ├── mcp/
 │   └── settings.template.json   # 公司 MCP 配置模板（脱敏）
 ├── rules/
+│   ├── steering/                # 公司级规则（Markdown，通用）
+│   │   └── code-author.md
 │   └── hooks/
 │       └── sql-guard.template.json
 └── skills/                      # 公司级 Skills（全局安装，同名优先于 personal）

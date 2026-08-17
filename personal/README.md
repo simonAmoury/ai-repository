@@ -11,7 +11,7 @@ personal/
 ├── rules/
 │   ├── steering/                # 代码风格、语言偏好（Markdown，通用）
 │   └── hooks/                   # 工具控制规则（.rule.json，agent 无关）
-└── skills/                      # Agent Skills（Claude/Codex 共用）
+└── skills/                      # Agent Skills（Claude/Codex/Kiro 共用）
     ├── deploy-to-vercel/
     ├── find-skills/
     └── terminal-title/
@@ -23,3 +23,4 @@ personal/
 |------|------|
 | Claude | Skills → `~/.claude/skills`；规则 → 项目 `CLAUDE.md` |
 | Codex | Skills → `~/.agents/skills`；规则 → 项目 `AGENTS.md` |
+| Kiro | Skills → `~/.kiro/skills`；规则 → 项目 `.kiro/steering/ai-repository.md` |

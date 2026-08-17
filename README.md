@@ -1,6 +1,6 @@
 # AI Repository
 
-公司级与个人级 AI 配置的单一事实来源，通过统一核心转换为 Claude Code 或 Codex 所需格式。
+公司级与个人级 AI 配置的单一事实来源，通过统一核心转换为 Claude Code、Codex 或 Kiro 所需格式。
 
 ## 分层与优先级
 
@@ -11,7 +11,7 @@
 - `company/`：公司规则、MCP、Skills，优先级高于个人配置。
 - `personal/`：个人规则、MCP、Skills。
 - 同名 MCP Server 和 Skill 由公司级覆盖个人级。
-- 当前仅适配 Claude Code 与 Codex，不处理 Kiro。
+- 当前适配 Claude Code、Codex 与 Kiro。
 
 ## 目录结构
 
@@ -28,7 +28,7 @@ ai-repository/
 │   └── skills/
 ├── src/
 │   ├── core/                 # 统一加载、合并、转换和文件处理
-│   └── adapters/             # Claude/Codex 策略适配器
+│   └── adapters/             # Claude/Codex/Kiro 策略适配器
 ├── scripts/
 │   └── ai-config.js          # 唯一入口
 └── tests/
@@ -49,9 +49,13 @@ Copy-Item company\mcp\settings.template.json company\mcp\settings.json
 # 按实际使用的 Agent 安装用户级 Skills；不使用的 Agent 可以跳过
 node scripts\ai-config.js claude skills
 node scripts\ai-config.js codex skills
+node scripts\ai-config.js kiro skills
 
 # 为当前 ai-repository 启用 Skill 自动同步 Hook
 node scripts\ai-config.js hooks install
+
+# 初始化跨会话长期记忆库骨架（幂等，不覆盖已有内容）
+node scripts\ai-config.js memory init
 ```
 
 `hooks install` 会把 `core.hooksPath=.githooks` 写入当前仓库的本地 `.git/config`。该配置不会提交到远端，所以每台新机器、每份新克隆都需要执行一次；同一份仓库无需重复执行。
@@ -72,6 +76,12 @@ node scripts/ai-config.js codex skills
 
 # Codex：接入项目
 node scripts/ai-config.js codex install /path/to/project
+
+# Kiro：用户级安装 Skills
+node scripts/ai-config.js kiro skills
+
+# Kiro：接入项目
+node scripts/ai-config.js kiro install /path/to/project
 ```
 
 不传项目目录时可显式使用当前目录：
@@ -96,6 +106,12 @@ node D:\hub\ai-repository\scripts\ai-config.js claude install D:\hub\awswaf
 
 # 将 Codex 项目配置接入 D:\hub\awswaf
 node D:\hub\ai-repository\scripts\ai-config.js codex install D:\hub\awswaf
+
+# 用户级安装 Kiro Skills：写入当前用户的 ~/.kiro/skills，通常每台机器只需执行一次
+node D:\hub\ai-repository\scripts\ai-config.js kiro skills
+
+# 将 Kiro 项目配置接入 D:\hub\awswaf
+node D:\hub\ai-repository\scripts\ai-config.js kiro install D:\hub\awswaf
 ```
 
 如果只使用 Codex，只需执行 `codex skills` 和 `codex install` 两条命令。`skills` 是用户级安装，不会写入 `D:\hub\awswaf`；`install` 才会在目标项目中生成或更新 Agent 配置。
@@ -118,6 +134,7 @@ node scripts\ai-config.js hooks install
 
 - 已安装 `~/.claude/skills` 时同步 Claude；
 - 已安装 `~/.agents/skills` 时同步 Codex；
+- 已安装 `~/.kiro/skills` 时同步 Kiro；
 - 未使用过的 Agent 不会被自动安装；
 - 软链接 Skill 会重建链接；复制回退的 Skill 通过受管清单安全更新；
 - 仅普通代码或文档变化时不会触发 Skill 同步；
@@ -164,6 +181,26 @@ Codex 不支持本仓库使用的 Claude `@import` 接线方式，因此规则�
 
 如果 `.codex/config.toml` 已有项目手写的同名 MCP Server，脚本会保留手写配置并跳过该 Server。
 
+## Kiro 策略
+
+### Skills
+
+Kiro Skills 安装到用户级 `~/.kiro/skills/`，链接及覆盖策略与 Claude 一致。
+
+### 项目生成物
+
+| 文件 | 作用 |
+|---|---|
+| `.kiro/steering/ai-repository.md` | 写入完整公司/个人规则与 Hook 规则；只更新 ai-repository 托管区 |
+| `.kiro/settings/mcp.json` | 项目 MCP 配置，已存在时不覆盖 |
+| `sql-guard.json` | SQL 白名单模板，已存在时不覆盖 |
+
+Kiro steering 的 `#[[file:...]]` 只能引用工作区内文件，无法指向本仓库，因此与 Codex 一样内联完整规则，规则源变更后需要重新执行一次 `kiro install`。Skill 使用目录链接时无需重装。
+
+`.kiro/steering/` 是多文件目录，项目自有规则放在同目录其他 `.md` 中即可，脚本只维护 `ai-repository.md` 的托管区。
+
+项目 `.kiro/settings/mcp.json` 已存在时不覆盖；需要用当前源配置重新生成时，删除该文件后重跑 `kiro install`。
+
 ## MCP 与凭据
 
 - 新机器首次使用时，先复制公司级模板：
@@ -176,7 +213,7 @@ Codex 不支持本仓库使用的 Claude `@import` 接线方式，因此规则�
 - `company/mcp/settings.json` 已被 Git 忽略，只保存在本机；远端只保留脱敏的 `settings.template.json`。
 - 每层优先读取被 Git 忽略的 `mcp/settings.json`，缺失时读取 `settings.template.json`。
 - 先加载个人 MCP，再以公司同名 Server 覆盖。
-- Claude 输出 `.mcp.json`；Codex 输出 `.codex/config.toml`。
+- Claude 输出 `.mcp.json`；Codex 输出 `.codex/config.toml`；Kiro 输出 `.kiro/settings/mcp.json`。
 - MCP 配置和 `sql-guard.json` 会加入目标项目的 `.git/info/exclude`，不会修改项目 `.gitignore`。
 - 不要把真实凭据提交到仓库。
 
@@ -209,10 +246,24 @@ node scripts\ai-config.js claude mcp-sync D:\hub\pac-platform --force
 node scripts\ai-config.js claude mcp-sync --all --force
 ```
 
+## 长期记忆
+
+跨会话、跨工具（Claude / Codex / Kiro 共用）的长期记忆存放在仓库根的 `memory/` 目录，与规则、Skill 一样是单一事实来源，但由 Agent 直接按绝对路径读写，不经适配器分发。
+
+```text
+memory/
+├── global/lessons.md              # 全局级：跨项目通用错误 / 反复纠错点（纳入版本库）
+└── projects/<项目名>/<需求>.md      # 业务需求级：核心逻辑/设计/该需求特有的坑（仅本机，不提交）
+```
+
+- 版本控制：`global/` 提交并随 `git pull` 跨机器同步；`projects/` 由 `memory/.gitignore` 忽略，仅本机保留。
+- 命令：`memory init` 幂等创建骨架，`memory status` 打印记忆库根目录与统计（供 Agent 定位）。
+- 行为约定：由个人规则 `memory-sync.md`（何时读写）与 `managing-memory` Skill（格式与流程）共同约束。开发前先查记忆并与最新代码交叉验证，任务完成即沉淀。
+
 ## 测试
 
 ```bash
 node --test tests/ai-config.test.js
 ```
 
-测试覆盖 Claude 兼容生成物、两种用户级 Skill 目录、Codex 生成物、幂等更新、手写规则保留和 MCP 冲突保护。
+测试覆盖 Claude 兼容生成物、三种用户级 Skill 目录、Codex 与 Kiro 生成物、幂等更新、手写规则保留和 MCP 冲突保护。

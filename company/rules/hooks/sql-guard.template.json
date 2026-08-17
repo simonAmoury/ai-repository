@@ -5,6 +5,8 @@
   "allowedOperations": [
     "SELECT",
     "INSERT",
-    "CREATE"
+    "CREATE",
+    "SHOW",
+    "DESCRIBE"
   ]
 }
