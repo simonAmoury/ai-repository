@@ -71,3 +71,22 @@
 - 某个行为能通过重写语言/框架已有的方法表达时，就重写它，不要再定义一个语义相同的自定义方法。典型如：对象转字符串表达用 `toString()`，而不是另写 `toXxxString()`；相等性判断用 `equals()` / `hashCode()`；排序用 `Comparable.compareTo()` 或 `Comparator`。
 - Spring 已具备的能力优先用框架扩展点，不要另写一套平行实现。典型如：参数校验用 JSR-303 注解 + `@Valid`，类型转换用 `Converter` / `Formatter`，请求前后处理用 `HandlerInterceptor` / `@ControllerAdvice`，事件通知用 `ApplicationEvent`，定时任务用 `@Scheduled`，事务用 `@Transactional`，启动初始化用 `ApplicationRunner` / `InitializingBean`。
 - 例外：重写会破坏原方法的语义契约时（如 `toString()` 还需承担调试输出用途、`equals()` 语义会影响集合行为），保留独立方法，并在注释中说明原因。
+
+## 日期时间格式化优先用 Hutool DatePattern 常量
+
+- 需要 `DateTimeFormatter` 或日期 pattern 时，优先引用 `cn.hutool.core.date.DatePattern` 里的现成常量，不要在各个类里自己 `DateTimeFormatter.ofPattern("yyyy-MM-dd")` 再声明一个私有静态字段。
+
+  ```java
+  // ✅ 直接用 DatePattern 常量
+  LocalDate.parse(text, DatePattern.NORM_DATE_FORMATTER);
+  DatePattern.NORM_DATETIME_FORMATTER.format(localDateTime);
+
+  // ❌ 每个类各自定义一份
+  private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+  private static final DateTimeFormatter LOG_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+  ```
+
+- 已验证可用的常量：`yyyy-MM-dd` → `DatePattern.NORM_DATE_FORMATTER`，`yyyy-MM-dd HH:mm:ss` → `DatePattern.NORM_DATETIME_FORMATTER`。其他格式先到 `DatePattern` 里找同名常量（`*_FORMATTER` 是 `DateTimeFormatter` 实例，`*_PATTERN` 是 pattern 字符串），确认存在后再用，不要凭记忆写常量名。
+- 理由：pattern 字面量散落在各类中，同一格式会出现多份定义，也容易出现 `yyyy` 写成 `YYYY`（周年）这类难查的笔误；`DatePattern` 的 `DateTimeFormatter` 常量本身线程安全，可以直接共享，无需每个类各持一份。
+- `DatePattern` 中确实没有的业务特有格式才自建，且要集中放在项目统一的日期常量类里维护，不要散落在业务类内部。
+- 项目已有自建日期常量类（如 `DatePatternConstant`）时沿用项目既有风格，但同一格式不要在同一模块里既用 Hutool 常量又用自建常量。
