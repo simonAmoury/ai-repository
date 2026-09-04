@@ -34,12 +34,15 @@ function loadLayer(root, layer) {
       .map((entry) => ({ layer, name: entry.name, dir: path.join(skillsDir, entry.name) }))
     : [];
 
+  const claudeSettingsFile = path.join(layerRoot, "claude", "user-settings.json");
+
   return {
     steering,
     hooks,
     mcpFile,
     mcp: mcpFile ? readJson(mcpFile) : { mcpServers: {} },
     skills,
+    claudeUserSettings: fs.existsSync(claudeSettingsFile) ? readJson(claudeSettingsFile) : {},
   };
 }
 
@@ -71,6 +74,16 @@ class RepositoryConfig {
     for (const skill of this.layers.personal.skills) merged.set(skill.name, skill);
     for (const skill of this.layers.company.skills) merged.set(skill.name, skill);
     return [...merged.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  claudeUserSettings() {
+    const personal = this.layers.personal.claudeUserSettings;
+    const company = this.layers.company.claudeUserSettings;
+    return {
+      ...personal,
+      ...company,
+      env: { ...(personal.env || {}), ...(company.env || {}) },
+    };
   }
 
   sqlGuardTemplate() {

@@ -46,7 +46,7 @@ cd D:\hub\ai-repository
 Copy-Item company\mcp\settings.template.json company\mcp\settings.json
 # 编辑 company\mcp\settings.json 后，再执行任何项目 install
 
-# 按实际使用的 Agent 安装用户级 Skills；不使用的 Agent 可以跳过
+# 按实际使用的 Agent 安装用户级 Skills 和 settings；不使用的 Agent 可以跳过
 node scripts\ai-config.js claude skills
 node scripts\ai-config.js codex skills
 node scripts\ai-config.js kiro skills
@@ -65,7 +65,7 @@ node scripts\ai-config.js memory init
 Claude/Codex 项目接入均为手动执行，不注册 Agent 会话 Hook，也不会自动拉取仓库。用户级 Skill 的 Git 变更自动同步见后文。
 
 ```bash
-# Claude：用户级安装 Skills
+# Claude：用户级安装 Skills 和 settings
 node scripts/ai-config.js claude skills
 
 # Claude：接入项目
@@ -216,6 +216,20 @@ Kiro steering 的 `#[[file:...]]` 只能引用工作区内文件，无法指向�
 - Claude 输出 `.mcp.json`；Codex 输出 `.codex/config.toml`；Kiro 输出 `.kiro/settings/mcp.json`。
 - MCP 配置和 `sql-guard.json` 会加入目标项目的 `.git/info/exclude`，不会修改项目 `.gitignore`。
 - 不要把真实凭据提交到仓库。
+
+### Claude 用户级 settings 托管
+
+`node scripts/ai-config.js claude skills` 除了安装 Skills，还会合并 `~/.claude/settings.json`，托管以下配置项：
+
+- **托管键（可进版本库）**：`env.ENABLE_TOOL_SEARCH`、`env.ANTHROPIC_BASE_URL`（去密钥化的 base URL）
+- **本机保留键（不覆盖）**：`env.ANTHROPIC_AUTH_TOKEN`、`hooks`、`model`、`env` 中其他自定义键
+
+合并规则：
+
+- 公司级配置覆盖个人级（`company/claude/user-settings.json` > `personal/claude/user-settings.json`）。
+- 现有 `~/.claude/settings.json` 中的托管键会被仓库值覆盖；本机保留键原样保留。
+- 文件不存在时新建；格式损坏时中止并报错，不覆盖原文件。
+- 当前仓库已托管 `ENABLE_TOOL_SEARCH: "true"`（在非第一方 `ANTHROPIC_BASE_URL` 环境下强制开启 tool search，需代理支持 `tool_reference`）。
 
 ### Claude MCP 同步
 

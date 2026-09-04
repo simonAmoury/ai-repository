@@ -3,16 +3,18 @@
 const fs = require("fs");
 const path = require("path");
 const { AgentAdapter } = require("./agent-adapter");
-const { addLocalIgnores, copyIfMissing, ensureDir, writeText } = require("../core/files");
+const { applyUserSettings } = require("../core/claude-user-settings");
+const { ensureDir, writeText, writeTextIfMissing } = require("../core/files");
+const { addLocalIgnores } = require("../core/git-exclude");
 const { generateHookMarkdown } = require("../core/hook-markdown");
 const { updateManagedBlock } = require("../core/managed-block");
+const { installProjectSupportFiles } = require("../core/project-support");
 const {
   hashText,
   jsonEquals,
   McpProjectRegistry,
   renderMcpJson,
 } = require("../core/mcp-project-registry");
-const { installSkills } = require("../core/skill-installer");
 
 const START = "<!-- ai-repo-imports:start -->";
 const END = "<!-- ai-repo-imports:end -->";
@@ -29,19 +31,33 @@ class ClaudeAdapter extends AgentAdapter {
     return new McpProjectRegistry(this.repository.root, this.localStateDir);
   }
 
+  skillsDirectory() {
+    return path.join(this.homeDir, ".claude", "skills");
+  }
+
+  userSettingsFile() {
+    return path.join(this.homeDir, ".claude", "settings.json");
+  }
+
   installSkills() {
-    const destination = path.join(this.homeDir, ".claude", "skills");
-    const result = installSkills(this.repository.skills(), destination);
-    this.output.log(`Claude Skills: ${destination}`);
-    this.output.log(`  链接 ${result.linked.length} / 复制 ${result.copied.length} / 删除 ${result.removed.length} / 跳过 ${result.skipped.length}`);
-    return { destination, ...result };
+    const result = this.installSkillsAt("Claude");
+    this.syncUserSettings();
+    return result;
+  }
+
+  syncUserSettings() {
+    const desired = this.repository.claudeUserSettings();
+    if (!Object.keys(desired).length) return null;
+    const file = this.userSettingsFile();
+    const result = applyUserSettings(file, desired);
+    this.output.log(result.changed
+      ? `Claude 用户级设置已更新: ${file}（${result.keys.join(", ")}；需重启 Claude 生效）`
+      : `Claude 用户级设置已是最新: ${file}`);
+    return result;
   }
 
   installProject(projectDir) {
-    const project = path.resolve(projectDir);
-    if (!fs.existsSync(project) || !fs.statSync(project).isDirectory()) {
-      throw new Error(`项目目录不存在: ${project}`);
-    }
+    const project = this.resolveProjectDir(projectDir);
 
     const claudeDir = path.join(project, ".claude");
     ensureDir(claudeDir);
@@ -91,26 +107,21 @@ class ClaudeAdapter extends AgentAdapter {
 
     const mcpFile = path.join(project, ".mcp.json");
     const desiredMcp = renderMcpJson(this.repository.mcp());
-    if (!fs.existsSync(mcpFile)) writeText(mcpFile, desiredMcp);
+    writeTextIfMissing(mcpFile, desiredMcp);
     const currentMcp = fs.readFileSync(mcpFile, "utf8");
     if (jsonEquals(currentMcp, this.repository.mcp())) {
       this.registry().register(project, hashText(currentMcp));
     } else if (!this.registry().get(project)) {
       this.output.warn?.(`项目已有非受管 .mcp.json，未登记自动同步: ${mcpFile}`);
     }
-    const guardFile = path.join(project, "sql-guard.json");
-    copyIfMissing(this.repository.sqlGuardTemplate(), guardFile);
-    addLocalIgnores(project, [".mcp.json", "sql-guard.json"]);
+    const guardFile = installProjectSupportFiles(this.repository, project, [mcpFile]);
 
     this.output.log(`Claude 项目接入完成: ${project}`);
     return { project, claudeFile, hooksFile, mcpFile, guardFile };
   }
 
   syncMcpProject(projectDir, { force = false } = {}) {
-    const project = path.resolve(projectDir);
-    if (!fs.existsSync(project) || !fs.statSync(project).isDirectory()) {
-      throw new Error(`项目目录不存在: ${project}`);
-    }
+    const project = this.resolveProjectDir(projectDir);
 
     const mcpFile = path.join(project, ".mcp.json");
     const desiredValue = this.repository.mcp();
