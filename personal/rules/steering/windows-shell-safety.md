@@ -20,3 +20,12 @@
 ## 判断「是不是真卡住」
 
 命令回显残缺、为空、或只有尾部片段时，**不要立即重试**，先按上面的方式把输出落盘再读一次确认执行结果；重复执行有副作用的命令（写库、删文件、install）风险更高。
+
+## Bash 工具在 Windows 上不可靠
+
+实测：Bash 工具的管道输出（`grep -rn`、`env | grep`、`git log`）在本机频繁超时无返回，而 PowerShell 工具同类操作全部正常。推测 Bash 走 Git Bash（MSYS2/Cygwin）层时，stdout 捕获机制与上述环境坑叠加，导致工具层认为命令未结束、一直等到 timeout。
+
+**强制做法**：
+- **交互式诊断、调试、看输出，一律用 PowerShell**，不用 Bash。
+- Bash 工具仅用于执行**已验证过的 POSIX 脚本**（如项目里既有的 `.sh` 构建脚本），且脚本内部不依赖交互式输入、stdout 正确性。
+- 需要 `grep` / `find` 能力时，用专用工具 `grep_search` / `file_search`，或用 PowerShell 的 `Select-String` / `Get-ChildItem`。
