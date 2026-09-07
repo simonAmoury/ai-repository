@@ -3,11 +3,11 @@
 const fs = require("fs");
 const path = require("path");
 const { AgentAdapter } = require("./agent-adapter");
-const { addLocalIgnores, copyIfMissing, ensureDir, writeText } = require("../core/files");
-const { generateHookMarkdown } = require("../core/hook-markdown");
+const { ensureDir, writeText } = require("../core/files");
+const { renderInlineRules } = require("../core/inline-rules");
 const { updateManagedBlock } = require("../core/managed-block");
 const { renderMcpServers } = require("../core/mcp-toml");
-const { installSkills } = require("../core/skill-installer");
+const { installProjectSupportFiles } = require("../core/project-support");
 
 const AGENTS_START = "<!-- ai-repository:begin (自动生成，请勿手动编辑此区块) -->";
 const AGENTS_END = "<!-- ai-repository:end -->";
@@ -15,31 +15,19 @@ const MCP_START = "# ai-repository:mcp:begin";
 const MCP_END = "# ai-repository:mcp:end";
 
 class CodexAdapter extends AgentAdapter {
+  skillsDirectory() {
+    return path.join(this.homeDir, ".agents", "skills");
+  }
+
   installSkills() {
-    const destination = path.join(this.homeDir, ".agents", "skills");
-    const result = installSkills(this.repository.skills(), destination);
-    this.output.log(`Codex Skills: ${destination}`);
-    this.output.log(`  链接 ${result.linked.length} / 复制 ${result.copied.length} / 删除 ${result.removed.length} / 跳过 ${result.skipped.length}`);
-    return { destination, ...result };
+    return this.installSkillsAt("Codex");
   }
 
   installProject(projectDir) {
-    const project = path.resolve(projectDir);
-    if (!fs.existsSync(project) || !fs.statSync(project).isDirectory()) {
-      throw new Error(`项目目录不存在: ${project}`);
-    }
+    const project = this.resolveProjectDir(projectDir);
 
     // Codex 将完整规则写入 AGENTS.md；个人在前、公司在后，确保公司规则优先。
-    const body = ["# 通用规范（来自 ai-repository，优先级：公司 > 个人）", ""];
-    for (const layer of ["personal", "company"]) {
-      const title = layer === "company" ? "公司规范" : "个人规范";
-      const steering = this.repository.layers[layer].steering;
-      if (!steering.length) continue;
-      body.push(`## ${title}`, "");
-      for (const entry of steering) body.push(entry.content.trim(), "");
-    }
-    const hookMarkdown = generateHookMarkdown(this.repository.hooks(["personal", "company"]));
-    if (hookMarkdown) body.push(hookMarkdown, "");
+    const body = renderInlineRules(this.repository, ["personal", "company"]);
 
     const agentsFile = path.join(project, "AGENTS.md");
     const projectTemplate = [
@@ -51,7 +39,7 @@ class CodexAdapter extends AgentAdapter {
       "",
     ].join("\n");
     const currentAgents = fs.existsSync(agentsFile) ? fs.readFileSync(agentsFile, "utf8") : projectTemplate;
-    writeText(agentsFile, updateManagedBlock(currentAgents, AGENTS_START, AGENTS_END, body.join("\n"), "prepend"));
+    writeText(agentsFile, updateManagedBlock(currentAgents, AGENTS_START, AGENTS_END, body, "prepend"));
 
     const codexDir = path.join(project, ".codex");
     ensureDir(codexDir);
@@ -64,9 +52,7 @@ class CodexAdapter extends AgentAdapter {
     const rendered = renderMcpServers(this.repository.mcp().mcpServers, unmanagedConfig);
     writeText(configFile, updateManagedBlock(currentConfig, MCP_START, MCP_END, rendered.text || "# 无需生成的 MCP Server", "append"));
 
-    const guardFile = path.join(project, "sql-guard.json");
-    copyIfMissing(this.repository.sqlGuardTemplate(), guardFile);
-    addLocalIgnores(project, [".codex/config.toml", "sql-guard.json"]);
+    const guardFile = installProjectSupportFiles(this.repository, project, [configFile]);
 
     if (rendered.skipped.length) {
       this.output.warn?.(`以下 MCP 已由项目手写配置管理，未覆盖: ${rendered.skipped.join(", ")}`);

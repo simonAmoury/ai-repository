@@ -2,7 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { ensureDir } = require("./files");
+const { ensureDir, writeTextIfMissing } = require("./files");
 
 const GITIGNORE = [
   "# 记忆库版本控制策略（由 ai-repository 维护）",
@@ -73,13 +73,6 @@ function memoryRoot(repositoryRoot) {
   return path.join(path.resolve(repositoryRoot), "memory");
 }
 
-function writeIfMissing(file, content) {
-  if (fs.existsSync(file)) return false;
-  ensureDir(path.dirname(file));
-  fs.writeFileSync(file, content.endsWith("\n") ? content : `${content}\n`, "utf8");
-  return true;
-}
-
 function ensureScaffold(repositoryRoot) {
   const root = memoryRoot(repositoryRoot);
   ensureDir(root);
@@ -91,7 +84,7 @@ function ensureScaffold(repositoryRoot) {
     [path.join(root, "projects", ".gitkeep"), ""],
   ];
   for (const [file, content] of files) {
-    if (writeIfMissing(file, content)) created.push(path.relative(root, file) || path.basename(file));
+    if (writeTextIfMissing(file, content)) created.push(path.relative(root, file) || path.basename(file));
   }
   return { root, created };
 }

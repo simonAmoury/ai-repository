@@ -2,15 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const childProcess = require("child_process");
-
-function git(repositoryRoot, args, options = {}) {
-  return childProcess.execFileSync(
-    "git",
-    ["-C", repositoryRoot, ...args],
-    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...options },
-  ).trim();
-}
+const { git } = require("./git-command");
 
 function installGitHooks(repositoryRoot) {
   const hooksDir = path.join(repositoryRoot, ".githooks");
