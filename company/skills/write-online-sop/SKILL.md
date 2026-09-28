@@ -50,14 +50,11 @@ version: "1.0.0"
 
 > 结尾统一提醒「配置改完在 Apollo **点发布**」。
 
-#### 服务坐标对照表（生产环境 PRO-HWGZ）
+#### 服务坐标对照表
 
-按服务名查 appid / cluster，填入上表；其它环境的坐标以实际 Apollo 为准。
+appid / cluster 见 `resources/service-coordinates.md`，按服务名查表填入上表。需要填 Apollo 表时再读该文件。
 
-| 服务 | appid | env | cluster |
-|------|-------|-----|---------|
-| pac-foreign | pac-platform | PRO-HWGZ | pac-platform-cluster |
-| pac-bop-admin | pac-bop | PRO-HWGZ | default |
+注意 appid 常与服务名不同（如 `pac-foreign` 的 appid 是 `pac-platform`），必须查表，不要用服务名当 appid。
 
 ### 外部平台 / 权限条目
 
@@ -85,5 +82,16 @@ version: "1.0.0"
 ## 输出约定
 
 - 用中文、Markdown 表格与勾选清单。
-- 文件命名 `上线SOP.md`，放对应 spec / 迭代目录下。
-- 生成后逐节对照本规范自查：四大块齐全、每条外部改动含「不处理的后果」、可选项已标注。
+- 文件命名 `online-sop.md`，放对应 spec / 迭代目录下。
+
+## 交付前自查
+
+逐条核对，有不满足的先改再交：
+
+- [ ] 四大块齐全：上线前需处理项 / 上线顺序 / 上线后自检 / 回滚。
+- [ ] Apollo 配置表严格 6 列（服务 / appid / env / cluster / key / value），**不含**「不处理的后果」列，且结尾有「点发布」提醒。
+- [ ] 每条**外部平台 / 权限**条目写明了不开通的报错表现（这是「不处理的后果」的落点，与 Apollo 表无关）。
+- [ ] DDL：有则标注执行库与执行时机；仅测试库的显式标注「⚠️ 线上库不执行」；无变更则在回滚节写明「无 DDL 变更，无需回滚」。
+- [ ] 上线后自检每条都是可观测结果（页面表现 / 卡片行为 / 接口返回），没有「验证功能正常」这类空泛项。
+- [ ] 回滚表四行齐全（应用 / Apollo / 数据库 / 其他），无回滚项也写「无」而非留空。
+- [ ] appid / cluster 来自 `resources/service-coordinates.md` 查表，不是照服务名猜的。
