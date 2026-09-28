@@ -1,9 +1,10 @@
 ---
 name: deploy-to-vercel
 description: Deploy applications and websites to Vercel. Use when the user requests deployment actions like "deploy my app", "deploy and give me the link", "push this live", or "create a preview deployment".
+allowed-tools: "Bash(vercel:*), Bash(git:*), Bash(npm install -g vercel), Bash(bash:*), Read, Glob, Grep, AskUserQuestion"
 metadata:
   author: vercel
-  version: "3.0.0"
+  version: "3.1.0"
 ---
 
 # Deploy to Vercel
@@ -11,6 +12,14 @@ metadata:
 Deploy any project to Vercel. **Always deploy as preview** (not production) unless the user explicitly asks for production.
 
 The goal is to get the user into the best long-term setup: their project linked to Vercel with git-push deploys. Every method below tries to move the user closer to that state.
+
+## Workflow checklist
+
+- [ ] Step 1  Gather project state (all four checks)
+- [ ] Step 2  Pick the deploy method from that state
+- [ ] Step 3  Confirm before pushing or linking   ⚠️ REQUIRED
+- [ ] Step 4  Deploy
+- [ ] Step 5  Report the deployment URL
 
 ## Step 1: Gather Project State
 
@@ -62,12 +71,20 @@ This is the ideal state. The project is linked and has git integration.
    trigger a deployment. Want me to proceed?
    ```
 
-2. **Commit and push:**
+2. **Commit and push.** Stage the files this deploy is actually about — check
+   `git status` first and name them explicitly:
    ```bash
-   git add .
+   git status --short
+   git add <path> [<path> ...]
    git commit -m "deploy: <description of changes>"
    git push
    ```
+   Do **not** use `git add .` here. The next command pushes, which triggers a
+   deploy, so anything unrelated sitting in the working tree ships too — local
+   experiments, debug edits, or a stray credentials file. If the working tree has
+   changes that don't belong in this deploy, say so and let the user decide
+   rather than sweeping them in.
+
    Vercel automatically builds from the push. Non-production branches get preview deployments; the production branch (usually `main`) gets a production deployment.
 
 3. **Retrieve the preview URL.** If the CLI is authenticated:
@@ -159,12 +176,31 @@ The Vercel CLI isn't set up at all.
 
 ---
 
+### Locating the bundled scripts
+
+Both fallbacks below run a script from this skill's own `resources/` directory.
+The skill's install location differs per agent environment, so resolve it once and
+reuse it — do not hardcode a path:
+
+```bash
+# Set this to wherever THIS skill is installed, e.g.:
+#   claude.ai sandbox   /mnt/skills/user/deploy-to-vercel
+#   Claude Code         ~/.claude/skills/deploy-to-vercel
+#   project-local       .claude/skills/deploy-to-vercel
+SKILL_DIR="<directory containing this SKILL.md>"
+```
+
+If unsure which applies, check with `ls "$SKILL_DIR/resources"` before running
+anything — it should list `deploy.sh` and `deploy-codex.sh`.
+
+---
+
 ### No-Auth Fallback — claude.ai sandbox
 
 **When to use:** Last resort when the CLI can't be installed or authenticated in the claude.ai sandbox. This requires no authentication — it returns a **Preview URL** (live site) and a **Claim URL** (transfer to your Vercel account).
 
 ```bash
-bash /mnt/skills/user/deploy-to-vercel/resources/deploy.sh [path]
+bash "$SKILL_DIR/resources/deploy.sh" [path]
 ```
 
 **Arguments:**
@@ -173,13 +209,13 @@ bash /mnt/skills/user/deploy-to-vercel/resources/deploy.sh [path]
 **Examples:**
 ```bash
 # Deploy current directory
-bash /mnt/skills/user/deploy-to-vercel/resources/deploy.sh
+bash "$SKILL_DIR/resources/deploy.sh"
 
 # Deploy specific project
-bash /mnt/skills/user/deploy-to-vercel/resources/deploy.sh /path/to/project
+bash "$SKILL_DIR/resources/deploy.sh" /path/to/project
 
 # Deploy existing tarball
-bash /mnt/skills/user/deploy-to-vercel/resources/deploy.sh /path/to/project.tgz
+bash "$SKILL_DIR/resources/deploy.sh" /path/to/project.tgz
 ```
 
 The script auto-detects the framework from `package.json`, packages the project (excluding `node_modules`, `.git`, `.env`), uploads it, and waits for the build to complete.
@@ -202,18 +238,16 @@ The script auto-detects the framework from `package.json`, packages the project 
    vercel deploy [path] -y --no-wait
    ```
 
-3. **If `vercel` is not installed, or the CLI fails with "No existing credentials found"**, use the fallback script:
+3. **If `vercel` is not installed, or the CLI fails with "No existing credentials found"**, use the fallback script (resolve `SKILL_DIR` as described in *Locating the bundled scripts* above):
    ```bash
-   skill_dir="<path-to-skill>"
-
    # Deploy current directory
-   bash "$skill_dir/resources/deploy-codex.sh"
+   bash "$SKILL_DIR/resources/deploy-codex.sh"
 
    # Deploy specific project
-   bash "$skill_dir/resources/deploy-codex.sh" /path/to/project
+   bash "$SKILL_DIR/resources/deploy-codex.sh" /path/to/project
 
    # Deploy existing tarball
-   bash "$skill_dir/resources/deploy-codex.sh" /path/to/project.tgz
+   bash "$SKILL_DIR/resources/deploy-codex.sh" /path/to/project.tgz
    ```
 
 The script handles framework detection, packaging, and deployment. It waits for the build to complete and returns JSON with `previewUrl` and `claimUrl`.
@@ -228,13 +262,14 @@ The script handles framework detection, packaging, and deployment. It waits for 
 
 ### Claude Code / terminal-based agents
 
-You have full shell access. Do NOT use the `/mnt/skills/` path. Follow the decision flow above using the CLI directly.
+You have full shell access. Follow the decision flow above using the CLI directly
+— the no-auth fallback should not be needed here.
 
-For the no-auth fallback, run the deploy script from the skill's installed location:
-```bash
-bash ~/.claude/skills/deploy-to-vercel/resources/deploy.sh [path]
-```
-The path may vary depending on where the user installed the skill.
+If you do need it, set `SKILL_DIR` to this skill's install location as described in
+*Locating the bundled scripts* (typically `~/.claude/skills/deploy-to-vercel`, but
+verify rather than assume — user-level, project-level, and plugin installs all
+differ). The `/mnt/skills/` path is specific to the claude.ai sandbox and does not
+exist here.
 
 ### Sandboxed environments (claude.ai)
 

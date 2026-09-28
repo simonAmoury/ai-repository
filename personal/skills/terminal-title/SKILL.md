@@ -1,8 +1,8 @@
 ---
 name: terminal-title
-description: Automatically updates the terminal window title to reflect the current high-level task. Use at the start of every terminal-based coding-agent session and whenever the user switches to a distinctly new high-level task.
-min_claude_code_version: "1.0.0"
-version: "1.1.0"
+description: Automatically updates the terminal window title to reflect the current high-level task. Use when starting a new terminal-based coding-agent session, and use when the user switches to a distinctly new high-level task (e.g. from "API Integration" to "Database Migration"). Useful when several agent terminals are open at once and their titles would otherwise be indistinguishable.
+allowed-tools: "Bash(bash scripts/set_title.sh:*), Bash(powershell -File scripts/set_title.ps1:*)"
+version: "1.2.0"
 ---
 
 # Terminal Title
@@ -33,10 +33,12 @@ Automatically sets descriptive terminal window titles based on the current codin
 
 ## How It Works
 
-1. **Extract Task Summary**: Analyze the user's prompt to identify the high-level task
-2. **Generate Title**: Create a concise, descriptive title (max 40 characters)
-3. **Set Title**: Execute the `scripts/set_title.sh` script with the generated title
-4. **No Confirmation Needed**: This happens automatically in the background
+- [ ] **Extract task summary** — analyze the user's prompt to identify the high-level task
+- [ ] **Generate title** — concise and descriptive, aim for 40 characters or fewer
+- [ ] **Set title** — run the script for the current platform (see *Implementation*)
+
+No confirmation needed: setting a window title is trivially reversible, so this
+happens automatically in the background.
 
 ## Title Format Guidelines
 
@@ -87,10 +89,22 @@ Keep titles concise, actionable, and immediately recognizable.
 
 ## Implementation
 
-**Execute the title script:**
+Pick the script that matches the platform. Both take the title as their single
+argument and behave identically.
+
+**macOS / Linux (and any POSIX shell):**
 ```bash
 bash scripts/set_title.sh "Your Title Here"
 ```
+
+**Windows:**
+```powershell
+powershell -NoProfile -File scripts/set_title.ps1 "Your Title Here"
+```
+
+Use the PowerShell script on Windows. Do not route `set_title.sh` through Git
+Bash or WSL there — the title it sets applies to that subshell, not to the host
+terminal window, so the call appears to succeed while nothing changes.
 
 **Example workflow:**
 ```bash
@@ -100,23 +114,34 @@ bash scripts/set_title.sh "Debug: Auth API Flow"
 # User asks: "Create a React component for the user profile page"
 bash scripts/set_title.sh "Build: User Profile UI"
 
-# User asks: "Write tests for the payment processing module"
-bash scripts/set_title.sh "Test: Payment Module"
+# Same thing on Windows
+powershell -NoProfile -File scripts/set_title.ps1 "Test: Payment Module"
 ```
 
 ## Script Details
 
-The `scripts/set_title.sh` script uses ANSI escape sequences to set the terminal title. It's compatible with:
+Both scripts accept a single argument (the title string) and exit silently if no
+title is provided (fail-safe behavior).
+
+`scripts/set_title.sh` uses ANSI escape sequences. Compatible with:
 - macOS Terminal
 - iTerm2
 - Alacritty
 - Most modern terminal emulators (xterm, rxvt, screen, tmux)
 
-The script accepts a single argument (the title string) and exits silently if no title is provided (fail-safe behavior).
+`scripts/set_title.ps1` sets `$Host.UI.RawUI.WindowTitle` *and* emits the same
+ANSI sequence, so it covers both conhost / Windows Terminal and ANSI-only hosts
+such as the VS Code integrated terminal and WezTerm.
+
+**Two different length numbers, on purpose:** the 40-character guidance under
+*Title Format Guidelines* is the authoring target — it keeps titles readable in a
+narrow tab. The scripts independently truncate at 80 characters, which is a
+safety cap against pathological input, not a license to write 80-character
+titles. Aim for 40; the cap should never engage.
 
 ## Automatic Directory Prefix
 
-The script automatically prefixes all titles with the current directory name (usually the repo/project name). This makes it easy to identify which project each terminal is working on:
+Both scripts automatically prefix all titles with the current directory name (usually the repo/project name). This makes it easy to identify which project each terminal is working on:
 
 ```
 my-project | Build: Dashboard UI

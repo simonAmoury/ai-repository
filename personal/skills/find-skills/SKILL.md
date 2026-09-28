@@ -1,11 +1,25 @@
 ---
 name: find-skills
 description: Helps users discover and install agent skills when they ask questions like "how do I do X", "find a skill for X", "is there a skill that can...", or express interest in extending capabilities. This skill should be used when the user is looking for functionality that might exist as an installable skill.
+allowed-tools: "Bash(npx skills:*), Read, Glob, Grep, AskUserQuestion"
 ---
 
 # Find Skills
 
 This skill helps you discover and install skills from the open agent skills ecosystem.
+
+> **Vendored external skill.** Source: the `skills.sh` ecosystem docs
+> (`npx skills`). Copied into this repo, not authored here. Last synced
+> 2026-09-17. Upstream changes to the CLI's flags will not appear here
+> automatically — re-check `npx skills --help` if a command behaves unexpectedly.
+
+## Workflow checklist
+
+- [ ] Step 1  Understand what the user needs (domain / task / likely to exist?)
+- [ ] Step 2  Search with `npx skills find <query>`
+- [ ] Step 3  Present the candidates with source and install command
+- [ ] Step 4  Confirm before installing        ⚠️ REQUIRED
+- [ ] Step 5  Install, then report what landed where
 
 ## When to Use This Skill
 
@@ -84,15 +98,46 @@ npx skills add vercel-labs/agent-skills@vercel-react-best-practices
 Learn more: https://skills.sh/vercel-labs/agent-skills/vercel-react-best-practices
 ```
 
-### Step 4: Offer to Install
+### Step 4: Confirm Before Installing ⚠️ REQUIRED
 
-If the user wants to proceed, you can install the skill for them:
+Installing a skill runs third-party code from a public repo and, with `-g`, drops
+it into the user's home directory where every future session loads it. Never
+install without explicit consent for that specific package.
+
+Before installing, state plainly:
+
+1. **Package** — the full `owner/repo@skill` identifier.
+2. **Source** — the repo it comes from, and whether you recognize it as a
+   well-known publisher (`vercel-labs/agent-skills`, `anthropics/skills`) or an
+   unfamiliar one.
+3. **Scope** — user-level (`-g`, affects all projects) or this project only.
+
+Then ask whether to proceed. If the publisher is unfamiliar, say so rather than
+presenting all sources as equivalent, and offer to show the skill's `SKILL.md`
+first so the user can read what it does before it is installed.
+
+Watch for names that merely resemble a well-known skill — a near-miss on a
+popular package is the standard typosquatting shape. Confirm the exact identifier
+against the `skills.sh` listing rather than pattern-matching on a familiar-looking
+name.
+
+### Step 5: Install and Report
+
+Once the user has approved that specific package:
 
 ```bash
-npx skills add <owner/repo@skill> -g -y
+npx skills add <owner/repo@skill> -g
 ```
 
-The `-g` flag installs globally (user-level) and `-y` skips confirmation prompts.
+The `-g` flag installs globally (user-level). Drop it to install into the current
+project only, which is the safer default when the user only needs the skill here.
+
+Add `-y` only when the user has already approved this exact package in Step 4 —
+it suppresses the CLI's own confirmation prompt, so it must never be the thing
+that makes an unreviewed install silent.
+
+After installing, tell the user the install path and that the skill takes effect
+in new sessions.
 
 ## Common Skill Categories
 
