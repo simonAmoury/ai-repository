@@ -40,7 +40,11 @@ function removeManagedTarget(target, expectedMode) {
   return false;
 }
 
-function installSkills(skills, destination) {
+// mode:
+//   "link" —— 优先 junction/symlink，失败退回复制（Claude / Codex）
+//   "copy" —— 直接落实体目录（Kiro：它扫描 skills 时用 readdir(withFileTypes)
+//             且只接受 isDirectory()，Windows junction 会被判为 link 而跳过）
+function installSkills(skills, destination, mode = "link") {
   ensureDir(destination);
   const previous = readManifest(destination);
   const next = { version: 1, generatedBy: "ai-repository", skills: {} };
@@ -65,6 +69,13 @@ function installSkills(skills, destination) {
         result.skipped.push(skill.name);
         continue;
       }
+    }
+
+    if (mode === "copy") {
+      fs.cpSync(skill.dir, target, { recursive: true });
+      result.copied.push(skill.name);
+      next.skills[skill.name] = { mode: "copy", source: path.resolve(skill.dir) };
+      continue;
     }
 
     try {

@@ -17,8 +17,10 @@ class KiroAdapter extends AgentAdapter {
     return path.join(this.homeDir, ".kiro", "skills");
   }
 
+  // Kiro 的 skill 扫描是 readdir(withFileTypes) + isDirectory() 过滤，
+  // junction 会被判成 link 而整条跳过，因此必须落实体目录而非链接。
   installSkills() {
-    return this.installSkillsAt("Kiro");
+    return this.installSkillsAt("Kiro", "copy");
   }
 
   installProject(projectDir) {

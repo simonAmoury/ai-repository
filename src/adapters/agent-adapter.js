@@ -12,9 +12,9 @@ class AgentAdapter {
     this.output = output;
   }
 
-  installSkillsAt(label) {
+  installSkillsAt(label, mode = "link") {
     const destination = this.skillsDirectory();
-    const result = installSkills(this.repository.skills(), destination);
+    const result = installSkills(this.repository.skills(), destination, mode);
     this.output.log(`${label} Skills: ${destination}`);
     this.output.log(`  链接 ${result.linked.length} / 复制 ${result.copied.length} / 删除 ${result.removed.length} / 跳过 ${result.skipped.length}`);
     return { destination, ...result };

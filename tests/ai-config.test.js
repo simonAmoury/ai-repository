@@ -136,6 +136,40 @@ test("Kiro 适配生成项目 steering、项目 MCP 与用户级 Skills", (t) =>
   assert.ok(fs.existsSync(path.join(skills.destination, "write-online-sop", "SKILL.md")));
 });
 
+// Kiro 的 skill 扫描是 readdir(withFileTypes) + isDirectory()，junction/symlink 会被整条跳过，
+// 因此 Kiro 必须落实体目录。这条断言是防回归的唯一防线：改回链接安装时它会立即失败。
+test("Kiro Skills 必须落实体目录，不能用链接", (t) => {
+  const { home } = workspace(t);
+  const adapter = new KiroAdapter({
+    repository: new RepositoryConfig(repositoryRoot),
+    homeDir: home,
+    output: silentOutput(),
+  });
+
+  const skills = adapter.installSkills();
+  assert.ok(skills.copied.length > 0, "Kiro 应以复制方式安装 Skill");
+  assert.equal(skills.linked.length, 0, "Kiro 不能以链接方式安装 Skill");
+
+  for (const name of skills.copied) {
+    const stat = fs.lstatSync(path.join(skills.destination, name));
+    assert.equal(stat.isSymbolicLink(), false, `${name} 被安装成了链接`);
+    assert.equal(stat.isDirectory(), true, `${name} 未被 readdir 判定为目录`);
+  }
+
+  // 复现 Kiro 的扫描逻辑：每个 Skill 都必须能通过 isDirectory() 过滤。
+  const scanned = fs.readdirSync(skills.destination, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+  for (const name of skills.copied) {
+    assert.ok(scanned.includes(name), `${name} 会被 Kiro 的目录扫描跳过`);
+  }
+
+  const manifest = JSON.parse(fs.readFileSync(path.join(skills.destination, MANIFEST), "utf8"));
+  for (const name of skills.copied) {
+    assert.equal(manifest.skills[name].mode, "copy");
+  }
+});
+
 test("Kiro 不覆盖项目已有的 MCP 配置", (t) => {
   const { home, project } = workspace(t);
   const mcpFile = path.join(project, ".kiro", "settings", "mcp.json");
