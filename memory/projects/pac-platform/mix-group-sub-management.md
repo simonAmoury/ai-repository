@@ -1,0 +1,82 @@
+---
+id: pac-platform/mix-group-sub-management
+scope: project
+project: pac-platform
+feature: mix-group-sub-management
+updated: 2026-08-24
+tags: [git-history, simon.ye, mixGroupSub]
+code_anchors:
+  - path: pac-biz/pac-biz-trade/src/main/java/com/tecdo/pac/biz/trade/controller/MixSourceTagConfigController.java
+    symbol: 历史提交影响文件；需按当前实现核对
+  - path: pac-biz/pac-biz-trade/src/main/java/com/tecdo/pac/biz/trade/mapper/MixSourceTagConfigTradeInfoMapper.java
+    symbol: 历史提交影响文件；需按当前实现核对
+  - path: pac-biz/pac-biz-trade/src/main/java/com/tecdo/pac/biz/trade/service/IMixSourceTagConfigService.java
+    symbol: 历史提交影响文件；需按当前实现核对
+  - path: pac-biz/pac-biz-trade/src/main/java/com/tecdo/pac/biz/trade/service/IMixSourceTagConfigTradeInfoService.java
+    symbol: 历史提交影响文件；需按当前实现核对
+  - path: pac-biz/pac-biz-trade/src/main/java/com/tecdo/pac/biz/trade/service/impl/MixSourceTagConfigServiceImpl.java
+    symbol: 历史提交影响文件；需按当前实现核对
+  - path: pac-biz/pac-biz-trade/src/main/java/com/tecdo/pac/biz/trade/service/impl/MixSourceTagConfigTradeInfoServiceImpl.java
+    symbol: 历史提交影响文件；需按当前实现核对
+  - path: pac-biz/pac-biz-trade/src/main/java/com/tecdo/pac/biz/trade/task/XxlJobHandler.java
+    symbol: 历史提交影响文件；需按当前实现核对
+  - path: pac-biz/pac-biz-trade/src/main/resources/mapper/MixSourceTagConfigTradeInfoMapper.xml
+    symbol: 历史提交影响文件；需按当前实现核对
+---
+
+## 核心业务逻辑
+
+该需求来自历史标签/源分支 `mixGroupSub`，共 7 条 Simon 提交，时间范围为
+2025-05-12 至 2025-05-22。提交标题是唯一已核对的历史业务描述；
+本记忆不把标题之外的推断写成事实。
+
+### 完整提交清单
+
+- `abbb7c66`（2025-05-12）：feat[mixGroupSub]: 子渠道优化
+- `0cc813da`（2025-05-21）：fix[mixGroupSub]: 类型转换
+- `1a991d08`（2025-05-21）：feat[mixGroupSub]: sql改写
+- `6786033b`（2025-05-21）：fix[mixGroupSub]: 日志
+- `d16ccc8f`（2025-05-21）：fix[mixGroupSub]: 空值不查询
+- `3f53770b`（2025-05-22）：fix[mixGroupSub]: 同步trm调整
+- `a744243b`（2025-05-22）：fix[mixGroupSub]: 取消并行流
+
+### 提交内容证据
+
+已逐条读取完整 `git show --unified=0` diff；以下仅摘录可安全记录的方法、类型或注解变更，
+不保存密码、token 等可能敏感的代码行。完整差异仍以提交哈希为准。
+
+- `abbb7c66`：涉及 4 个文件；新增证据：`public R<String> refreshSiteIdV2(@RequestParam(value = "sourceTagId") Long sourceTagId) {`；`service.refreshSiteIdV2(sourceTagId, false);`；`void refreshSiteIdV2(Long sourceTagId, Boolean isSystem);`；`void refreshSourceTagConfig(List<Long> sourceTagIdList);`；`public List<Long> add(MixSourceTagV2DTO dto,  Long userId) {`；`checkConfig(mixSourceTagDTO);`
+- `0cc813da`：涉及 1 个文件；新增证据：无可安全摘录的方法/类型声明，详见完整 diff
+- `1a991d08`：涉及 5 个文件；新增证据：`void saveBatchCustomize(@Param("tradeList") List<MixSourceTagConfigTradeInfo> tradeList);`；`void saveBatchCustomize(List<MixSourceTagConfigTradeInfo> tradeList);`；`tradeInfoService.saveBatchCustomize(tradeList);`；`@Override`；`public void saveBatchCustomize(List<MixSourceTagConfigTradeInfo> tradeList) {`；`this.baseMapper.saveBatchCustomize(tradeList);`
+- `6786033b`：涉及 1 个文件；新增证据：`logList.add(log);`
+- `d16ccc8f`：涉及 1 个文件；新增证据：`if (CollectionUtil.isNotEmpty(autoMixConfig)){`；`deleteItems.addAll(searchAutoMixTrmConfigCache(autoMixConfig));`
+- `3f53770b`：涉及 1 个文件；新增证据：`if (CollectionUtils.isNotEmpty(dataList)) {`；`CollUtil.split(dataList, 300).parallelStream().forEach((subRequestList) -> {`；`log.info("MIX {}::call trm api sourceTag request size {}", action, reqData.size());`；`log.info(String.format("MIX %s::call trm api sourceTag response: %s", action, response2));`；`AssertX.isTrue(0 == trmResponseCode2, "update trm fail...");`
+- `a744243b`：涉及 1 个文件；新增证据：`log.info("MIX {}::call trm api sourceTag request size {}", action, reqData.size());`；`log.info(String.format("MIX %s::call trm api sourceTag response: %s", action, response));`；`AssertX.isTrue(0 == trmResponseCode, "update trm fail...");`
+
+## 核心代码设计
+
+本需求历史上共影响 8 个文件；当前仍可在 `master` 定位 8 个。
+以下文件清单来自逐条 `git show --name-only`，用于恢复需求时回看每条提交完整 diff；“当前仍存在”
+只表示路径可解析，不等同于历史语义未漂移。
+
+- `pac-biz/pac-biz-trade/src/main/java/com/tecdo/pac/biz/trade/controller/MixSourceTagConfigController.java`（当前仍存在）
+- `pac-biz/pac-biz-trade/src/main/java/com/tecdo/pac/biz/trade/mapper/MixSourceTagConfigTradeInfoMapper.java`（当前仍存在）
+- `pac-biz/pac-biz-trade/src/main/java/com/tecdo/pac/biz/trade/service/IMixSourceTagConfigService.java`（当前仍存在）
+- `pac-biz/pac-biz-trade/src/main/java/com/tecdo/pac/biz/trade/service/IMixSourceTagConfigTradeInfoService.java`（当前仍存在）
+- `pac-biz/pac-biz-trade/src/main/java/com/tecdo/pac/biz/trade/service/impl/MixSourceTagConfigServiceImpl.java`（当前仍存在）
+- `pac-biz/pac-biz-trade/src/main/java/com/tecdo/pac/biz/trade/service/impl/MixSourceTagConfigTradeInfoServiceImpl.java`（当前仍存在）
+- `pac-biz/pac-biz-trade/src/main/java/com/tecdo/pac/biz/trade/task/XxlJobHandler.java`（当前仍存在）
+- `pac-biz/pac-biz-trade/src/main/resources/mapper/MixSourceTagConfigTradeInfoMapper.xml`（当前仍存在）
+
+## 踩过的坑 / 反复纠错点
+
+- 同一标签可能包含功能、修复和代码整理；必须以本节完整提交清单回看，不能只取第一条或最后一条提交。
+- 历史改动文件在当前 `master` 上可能被重命名、删除或被后续需求覆盖；当前路径不存在时保留提交哈希
+  作为唯一可靠回溯入口。
+- 本文由历史提交范围自动整理，未在没有明确 diff 证据的情况下虚构字段、状态、配置或外部平台规则。
+
+## 下次需交叉验证的锚点
+
+- 先运行 `git show <hash>` 阅读与本次问题相关的完整变更，再读取上方仍存在的当前文件。
+- 若需要恢复具体业务规则，逐一比较 `<hash>^..<hash>` 与当前 `master`，确认后再更新本记忆的
+  `code_anchors` 和核心业务逻辑；不要把历史文件路径直接当作当前实现。

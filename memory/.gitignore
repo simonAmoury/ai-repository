@@ -1,5 +1,3 @@
 # 记忆库版本控制策略（由 ai-repository 维护）
-# - 全局教训 global/ 与本说明纳入版本库，随 git 跨机器同步；
-# - 项目级记忆 projects/ 仅保留在本机，不提交（含各项目的踩坑与设计细节）。
-/projects/*
-!/projects/.gitkeep
+# - 全局教训 global/ 与项目级记忆 projects/ 均纳入版本库，随 git 跨机器同步；
+# - 项目记忆里不得写入密钥、凭据、大段代码原文。
