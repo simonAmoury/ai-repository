@@ -7,9 +7,8 @@ const { ensureDir, writeTextIfMissing } = require("./files");
 const GITIGNORE = [
   "# 记忆库版本控制策略（由 ai-repository 维护）",
   "# - 全局教训 global/ 与本说明纳入版本库，随 git 跨机器同步；",
-  "# - 项目级记忆 projects/ 仅保留在本机，不提交（含各项目的踩坑与设计细节）。",
-  "/projects/*",
-  "!/projects/.gitkeep",
+  "# - 项目级记忆 projects/ 均纳入版本库，随 git 跨机器同步；",
+  "# - 项目记忆里不得写入密钥、凭据、大段代码原文。",
   "",
 ].join("\n");
 
@@ -27,13 +26,13 @@ const README = [
   "│   └── lessons.md      # 全局级：跨项目通用的工作习惯类错误 / 反复纠错点（纳入版本库）",
   "└── projects/",
   "    └── <项目名>/",
-  "        └── <需求-slug>.md   # 业务需求级：核心逻辑、核心设计、该需求特有的坑（仅本机，不提交）",
+  "        └── <需求-slug>.md   # 业务需求级：核心逻辑、核心设计、该需求特有的坑（纳入版本库）",
   "```",
   "",
   "## 版本控制策略",
   "",
-  "- `global/`：提交，随 `git pull` 在各机器间同步。",
-  "- `projects/`：本机保留，不提交（见 `.gitignore`）。",
+  "- `global/` 与 `projects/` 均提交，随 `git pull` 在各机器间同步。",
+  "- 项目记忆里不得写入密钥、凭据、大段代码原文。",
   "",
   "## 读写约定（摘要，完整见 managing-memory skill）",
   "",

@@ -317,7 +317,7 @@ test("Claude MCP 单项目同步会登记摘要并阻止覆盖手工修改", (t)
   assert.equal(JSON.parse(fs.readFileSync(mcpFile, "utf8")).mcpServers.demo.env.DEMO_HOST, "host-three");
 });
 
-test("记忆库骨架幂等创建且项目级记忆被忽略", (t) => {
+test("记忆库骨架幂等创建", (t) => {
   const { root } = workspace(t);
   const repo = path.join(root, "repository");
   fs.mkdirSync(repo, { recursive: true });
@@ -326,11 +326,10 @@ test("记忆库骨架幂等创建且项目级记忆被忽略", (t) => {
   assert.equal(first.root, memoryRoot(repo));
   assert.ok(first.created.includes(".gitignore"));
   assert.ok(fs.existsSync(path.join(first.root, "global", "lessons.md")));
-  assert.ok(fs.existsSync(path.join(first.root, "projects", ".gitkeep")));
+  assert.ok(fs.existsSync(path.join(first.root, "projects")));
 
   const gitignore = fs.readFileSync(path.join(first.root, ".gitignore"), "utf8");
-  assert.match(gitignore, /\/projects\/\*/);
-  assert.match(gitignore, /!\/projects\/\.gitkeep/);
+  assert.match(gitignore, /projects.*纳入版本库/);
 
   fs.writeFileSync(path.join(first.root, "global", "lessons.md"), "custom", "utf8");
   const second = ensureScaffold(repo);

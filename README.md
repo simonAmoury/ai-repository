@@ -267,10 +267,10 @@ node scripts\ai-config.js claude mcp-sync --all --force
 ```text
 memory/
 ├── global/lessons.md              # 全局级：跨项目通用错误 / 反复纠错点（纳入版本库）
-└── projects/<项目名>/<需求>.md      # 业务需求级：核心逻辑/设计/该需求特有的坑（仅本机，不提交）
+└── projects/<项目名>/<需求>.md      # 业务需求级：核心逻辑/设计/该需求特有的坑（纳入版本库）
 ```
 
-- 版本控制：`global/` 提交并随 `git pull` 跨机器同步；`projects/` 由 `memory/.gitignore` 忽略，仅本机保留。
+- 版本控制：`global/` 与 `projects/` 均提交并随 `git pull` 跨机器同步。项目记忆里不得写入密钥、凭据、大段代码原文。
 - 命令：`memory init` 幂等创建骨架，`memory status` 打印记忆库根目录与统计（供 Agent 定位）。
 - 行为约定：由个人规则 `memory-sync.md`（何时读写）与 `managing-memory` Skill（格式与流程）共同约束。开发前先查记忆并与最新代码交叉验证，任务完成即沉淀。
 

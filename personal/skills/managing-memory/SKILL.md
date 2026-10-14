@@ -52,10 +52,10 @@ version: "1.2.0"
 ```text
 memory/
 ├── global/lessons.md              # 全局级：跨项目通用错误（提交进 git）
-└── projects/<项目名>/<需求-slug>.md   # 业务需求级：仅本机保留，不提交
+└── projects/<项目名>/<需求-slug>.md   # 业务需求级：核心逻辑/设计/该需求特有的坑（纳入版本库）
 ```
 
-- 全局教训随 git 跨机器同步；项目记忆仅本机（已在 `memory/.gitignore` 忽略 `projects/`）。
+- 全局教训与项目记忆均随 git 跨机器同步。项目记忆里不得写入密钥、凭据、大段代码原文。
 - `<项目名>` 用仓库目录名（如 `pac-platform`）；`<需求-slug>` 用短横线小写（如 `offline-approve-link-macro-whitelist`）。
 
 ## 三、业务需求级记忆格式
