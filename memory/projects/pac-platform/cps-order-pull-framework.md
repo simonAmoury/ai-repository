@@ -99,14 +99,14 @@ code_anchors:
 - **`cps_order_commission` 有四列是 `NOT NULL` 且无默认值**：`order_amount`、`commission_rate`、`open_commission_amount`、`inner_commission_amount`。库 `sql_mode` 实测含 `STRICT_TRANS_TABLES,STRICT_ALL_TABLES,TRADITIONAL`，映射留 `null` 会让**整批 insert 失败**、`upsertBatch` 事务回滚 → 该账号当前页数据全丢。MyBatis-Plus 默认 `insertStrategy=NOT_NULL`（项目无全局覆盖），null 字段不进 INSERT 语句，报错形式是 `Field 'xxx' doesn't have a default value`。四个字段现均缺失落 `0`。
 - **`commission_rate = 0` 是异常信号**：既有 31.6 万行历史数据里该字段没有任何 `0` 值，出现 `0` 说明报文 `commission` 对象缺失，要排查而不是当真实 0% 费率。兜底依据是 NOT NULL 约束，**不是** PB 下发——`CPSPbReissueTaskV2` 已不下发 `ad_commission_rate`（只有 V1 还发），`open_commission_amount` 仍经 `ad_estimated_commission` 下发。
 - **账号不能再挑之后，坏配置行必须清理**：provider 命中就全跑，测试库 `id=1`（缺 currency/orderCountry）每次都会失败，叠加「任一账号失败即 handleFail」会让整个任务告警。`sql-guard.json` 拦 DELETE，需人工在客户端删。
-- **配置校验必须前置到数据判空之前**：早期 `parseOrders` 先判 `data` 空就 return，导致「配置缺 currency/orderCountry + 当前窗口无订单」时账号被判成功、配置错误被静默吞掉。
-- **决策写「由线程池容量决定」却没写用哪个池**，实现就按项目规范注了共享 `threadPoolTaskExecutor`，与 TTS 拉单、账单事务后回调抢线程。后改为专用池。教训见 global L-012。
-- **`awaitAll` 早期用 `get()` + 恢复中断标志**，看似合规实则缺陷：中断即返回、子线程还在跑就进汇总。而且我第一版修复用 `while + get()` 重试，绕了远路——`join()` 本身就是不可中断等待。教训见 global L-013。
+- **配置校验必须前置到数据判空之前**：早期 `parseOrders` 先判 `data` 空就 return，导致「配置缺 currency/orderCountry + 当前窗口无订单」时账号被判成功、配置错误被静默吞掉。现在 ext_config 四键校验放在 `data` 判空之前，配置错误无论有没有数据都会失败。
+- **决策写「由线程池容量决定」却没写用哪个池**，实现就按项目规范注了共享 `threadPoolTaskExecutor`，与 TTS 拉单、账单事务后回调抢线程。后改为专用池。决策里涉及资源（线程池、队列、表）时必须写到具体实例名。
+- **`awaitAll` 早期用 `get()` + 恢复中断标志**，看似合规实则缺陷：中断即返回、子线程还在跑就进汇总。而且我第一版修复用 `while + get()` 重试，绕了远路——`join()` 本身就是不可中断等待，最终改用 `CompletableFuture.join()`。
 - **`hasMore` 与 `parseOrders` 各自 `parseResponse` 一次**，单页 500 条时每页两次完整反序列化。属基类「用 responseBody 字符串在扩展点间传递」的设计取舍，未优化。
 - **快照的 `origin_order` 仍是终态报文**：快照 `open_status=PROCESSED` 但 `origin_order` 内 `commissionStatus` 还是 `COMPLETE`（符合需求「其余字段保持 API 返回值」）。影响面有限：`CPSPbReissueTaskV2.addCustomFieldsToQueryParams` 只在 `customFieldMapping` 非空时读 `origin_order`，且只取配置点名的字段。将来若为 Blibli 配了映射且映射到状态类字段，才会出现矛盾。
 - **`resolveExecutableProviders` 曾写得过度复杂**：if/else 双分支 + 三次 `new ArrayList` + `removeAll`。简化为先无条件 `retainAll(handlerMap.keySet())`、再按点名收窄，用 `CollUtil.subtractToList` 替手工差集。保留的唯一行为差异：点名的 provider 跑不了就失败，未点名（全量）时无实现只 WARN 跳过（避免配置表一条未接入记录阻塞所有平台）。
 - **`super.` 前缀冗余扩散**：照抄既有 `listByAdvId` 的 `super.lambdaQuery()` 写法，复制出 3 处冗余。本类未重写这些继承方法，`super.` 无意义，已去掉本次新增的 4 处；既有 `listByAdvId` 那行不动。
-- **Blibli 待签串分隔符是 CRLF (`\r\n`)** 不是 LF；签名 query 必须与实际请求 query 逐字符一致，靠 `queryString` 字段实现同源。
+- **Blibli 待签串分隔符是 CRLF (`\r\n`)** 不是 LF；签名 query 必须与实际请求 query 逐字符一致，靠 `queryString` 字段实现同源。早期签名用 DTO 拼接、请求走 UrlBuilder 自动编码，两边不一致导致验签失败；反射拼 query 的 DTO 也不能加非接口参数字段。
 - **`BlibliOrderQueryDTO` 字段会被反射拼进 query**，不能加非接口参数字段；`BeanUtil.beanToMap` 第三参 `isToUnderlineCase` 必须 false。
 - **`tag` 取 `tags` 首元素而非 `clickId`**（实测 32 位 id + 13 位毫秒戳共 45 位，与 Coupang click_id 口径一致）；该原始值传给 `fillOrderTag` 后按 click/offline 协议落库。`commission_rate` 是百分数原值（`rate=2` 即 2%，不除 100）。
 - **本需求结论被反复推翻，改文档要五处同步**（术语表 / 决策表 / 需求正文 / 非目标 / Q 结论），漏一处即自相矛盾。已推翻过：country 列、去重键、验收方式、advId、分页设计、签名归属、jobParam 账号选择、快照范围、失败判定、线程池。

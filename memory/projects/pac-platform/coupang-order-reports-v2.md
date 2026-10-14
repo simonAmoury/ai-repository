@@ -82,7 +82,7 @@ Coupang 订单拉回 V2：把旧的「单账号 KR 硬编码 + Apollo 默认密�
 - **无批次号**：V1/V2 都没有执行批次标识，验证只能靠「执行前后按 `adv_id+provider+order_country+order_time` 建 `CREATE TABLE ... AS SELECT` 快照」来固定基线。
 - **`sql-guard.json` 只放开 SELECT/INSERT/CREATE/SHOW/DESCRIBE**，UPDATE/DROP 被 MCP 拦；快照表因此只能建、不能删，清理需人工。允许库：`pac_foreign_test02`、`pac_system`、`adplatform_test02`。
 - **`SHOW TABLES FROM adplatform_test02 LIKE ...` 的返回列名显示为 `Tables_in_pac_foreign_test02`**（MCP 连接的默认库是 pac_foreign_test02），列名会误导，判存在与否只看有没有数据行。
-- **测试代码不作为交付物**：10.1/10.2/15.1 三个测试任务经用户明确跳过，本次生成的测试文件已全部删除；曾误删仓库既有的 `pac-common/.../utils/Test.java`，已用 `git show HEAD:<path>` 原样恢复（教训见全局 L-006）。
+- **测试代码不作为交付物**：10.1/10.2/15.1 三个测试任务经用户明确跳过，本次生成的测试文件已全部删除；曾误删仓库既有的 `pac-common/.../utils/Test.java`，已用 `git show HEAD:<path>` 原样恢复。清理时只能删本次任务自己新建的文件，删前用 `git status` 区分新增与既有文件。
 - 根 `build.gradle` 全局 `test.enabled=false`；验证时临时改的构建开关已恢复。
 - **子代理不可用**：`spec-task-execution` 只在 Spec 会话可用，非 Spec 会话下编排任务会卡在 `in_progress`（本次 10.1 即处于该状态）。
 

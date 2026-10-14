@@ -110,7 +110,7 @@ ReelShort（短剧 CPS，api-cps.reelshort.com，文档称 RS-Boost）接入既�
   注释写「底层调用钉钉api」，但 `ICloudExcelService` 的两个实现里 `LarkSheetServiceImpl`（飞书）
   标了 `@Primary`、钉钉实现的 `@Primary` 被注释掉，Spring 多候选时 `@Primary` 优先于字段名匹配；
   且 `translateSpreadsheetToken2DingWorkbookId` 开头 `if (1 == 1) return`，token 原样透传。
-  我据类名断言它读钉钉，多写了一套 Feign 契约又删掉。教训见 global L-028。
+  我据类名断言它读钉钉，多写了一套 Feign 契约又删掉。判断底层实现要看实际 Spring 绑定（`@Primary`、条件装配）和方法体，不能看类名、包名、注释。
 - **`/fs/excel` 的 `querySheet` 只按 sheetName 过滤**，不认 `sheetIndex`；pac-foreign 内部的
   `IFeishuExcelService.querySheet` 支持 sheetIndex。两条链路不同，「取首个工作表」只能走后者。
 - **wiki URL 里没有 spreadsheetToken**：`/wiki/{nodeToken}` 是知识库节点 token，表格 token 是
@@ -134,7 +134,8 @@ ReelShort（短剧 CPS，api-cps.reelshort.com，文档称 RS-Boost）接入既�
   直连读同一张 wiki 内表格都是 `code=0`。请求体传 a403 与 a410 结果都是 403/91403，
   正是「appId 未被传下去」的直接体现。
   处置方案待用户定（补授权 `feishu.excel.app.id` / 新增尊重 appId 的读数据端点 / 统一读同一个 key）。
-  ⚠️ 这是 L-028 的同类问题再次发作：上次是「底层调用谁」，这次是「入参有没有被传下去」。
+  ⚠️ 与上面「`/fs/excel` 底层是飞书」是同类问题：上次是「底层调用谁」，这次是「入参有没有被传下去」。
+  调用内部接口时，要顺着调用链确认每个入参确实传到了底层，不能看 DTO 有这个字段就认为生效。
 - **「BOP通知」测试与生产是两个不同的飞书应用，appId 不同**（2026-09-21 踩到）：
   `cli_a403cb3e6bfa900e`=测试（= `FeiShuAppConstant.AppEnum.BOP_NOTICE` 硬编码值），
   `cli_a410e87d4a94500e`=生产（见 `LarkSheetServiceImpl` 上 `feishu.excel.app.id` 的注释）。

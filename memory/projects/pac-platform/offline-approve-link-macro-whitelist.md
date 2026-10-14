@@ -52,7 +52,7 @@ code_anchors:
 - **字典读取异常与 `PatternSyntaxException` 必须分开 `catch`**：合并后正则语法错误会被记成「字典读取失败」，排查方向错位。异常对象作为 `log.error` 最后一个参数保留堆栈。
 - **`queryOfferBaseInfoMap` 不补 `null`→`emptyMap` 降级**：需求明确禁止降级；同模块 `CplConfigValidator` 有该兜底但不照搬。`R` 成功但 data 为 null 时后续 `.get()` 抛 NPE，与改造前一致。
 - **上线顺序**：先配字典 + 清 `DICT_CACHE`，再发 `pac-biz-trade`；颠倒会使校验接口直接抛异常而非放行。前端字典页 submit/remove/batch-update 会自动清 `DICT_CACHE`，直接改库才需手工清。
-- **测试全绿≠功能可用**：开发期 35 用例全 mock 掉 `DictCache`，没验证真实读取链路；靠 MCP 逐字符核对入库值 + 打真实接口才验证到位（见全局 L-001）。最终交付**不含测试代码**。
+- **测试全绿≠功能可用**：开发期 35 用例全 mock 掉 `DictCache`，没验证真实读取链路；靠 MCP 逐字符核对入库值 + 打真实接口才验证到位。最终交付**不含测试代码**。
 - `sql-guard.json` 只放开 SELECT/INSERT/CREATE，UPDATE 被 MCP 拦，改库配置走前端或 INSERT。
 - `:pac-biz-trade:test` 全量任务含 11 个依赖真实 AF/Redis/Cassandra/Selenium 的既有集成测试，本地必失败，不能当验收门槛；`mockito-inline` 未在该模块声明。
 

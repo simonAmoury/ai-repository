@@ -91,13 +91,15 @@ DramaReach（StardustTV 短剧，`https://cps-api.dramareach.com`）接入既有
 
 ## 踩过的坑 / 反复纠错点
 
-- **断言「项目没有 BouncyCastle」不查依赖树**：据此手搓 PKCS#1→PKCS#8 的 DER 包装改了好几轮，
-  用户问「有没有现成工具」才查 `dependencies`，发现 bcprov 1.68 早已传递引入。见 global L-029。
-- **inner_status 照搬 NetShort 的 `PAID→CONFIRMED`**：NetShort 能下发靠额外的 `UNPAID→pending_confirm` 快照，
-  照搬时漏看；`CPSPbReissueTaskV2` 写死只扫 pending_confirm，CONFIRMED 永远不下发。见 global L-030。
-- 本需求沉淀的其他全局教训：L-031（删退款后遗留抽象基类）、L-032（私钥格式指令歧义来回四轮）、
-  L-033（commission_rate 用取整后金额算）、L-034（重命名工具不改调用方）、L-035（init 脚本 0 字节）、
-  L-036（测试期望值手算错）、L-037（自加金额回落/多格式兼容），以及 L-013 / L-022 / L-027 的后续补充。
+- **断言「项目没有 BouncyCastle」不查依赖树**：只看了 `build.gradle` 直接依赖、没搜到 BC 就断言「未引入」，据此手搓 PKCS#1→PKCS#8 的 DER 包装改了好几轮。用户问「有没有现成工具」才跑 `gradlew dependencies`，发现 `bcprov-jdk15on:1.68` 早已经 `pac-starter-log → spring-security-rsa` 传递引入。断言「没有」之前必须查传递依赖树。
+- **inner_status 照搬 NetShort 的 `PAID→CONFIRMED`**：看到 NetShort 把「已支付」映射成 `CONFIRMED` 就照搬；没注意 NetShort 能被下发，靠的是另外补的一条 `UNPAID→pending_confirm` 快照。`CPSPbReissueTaskV2` 的查询条件写死 `inner_status = 'pending_confirm'`，照搬后 DramaReach 的 CONFIRMED 订单永远不会被下发，且没有任何报错。落库状态值的唯一依据是下游消费方（定时任务、下发、报表）的过滤条件与常量；参照兄弟实现时要把它的**整套**机制读完（快照、二次写入、后处理）。
+- **删除退款接口后遗留抽象基类 `AbstractRefundHandler`**：两个子类删到只剩一个，但保留了抽象基类和 `apiPath()` 抽象方法，只剩的子类返回一个常量。被问「为什么要额外包一层」才意识到抽象已无存在理由。每次删减子类/接口/分支后，回看为它们建的抽象是否还有 ≥2 个使用方；只剩一个就合并回具体类。
+- **私钥格式指令歧义来回四轮**：用户说「存提取后的内容」，我按自己理解把 PKCS#1 离线转成 PKCS#8 再存，写完代码、SQL、文档才交付；用户看到 SQL 里的值与自己给的不一致，追问后又改。同一个格式在「多格式兼容 → 只认一种 → 手工包装 → 交给库」之间反复。格式类指令有两种以上解读时，先把**拟落库的实际字符串开头几十个字符 + 处理方式**发给用户确认，确认后再动手。
+- **commission_rate 用取整后金额算比例**：`order_amount` 按展示精度取整到 2 位后才落库，我直接用取整后的值算比例；小额数据失真明显（实测 JPY 10 × 0.007369 = 0.07369 → 取整 0.07，比例 71.43%，按原值应为 67.85%，偏差约 5%）。派生字段一律用未取整的中间值计算，各字段各自独立取整。
+- **Agent 的 `semantic_rename` 只改了方法声明，调用方都没动**：工具返回「Successfully renamed」，我以为调用方也已同步；实际 `1 file changed with 1 edit`，同类内部调用与跨模块调用方都没改。工具返回后先看「changed files / edits」数量是否与预期引用数相符；无论成功与否，都用 grep 全仓库搜旧名（含测试、XML、文档），逐处手改，最后编译确认。
+- **Gradle init 脚本经 fs_write 写到 .local 下偶发 0 字节**：写完直接执行，报错「Task 'printDrCp' not found」后反复重跑；实际执行那一刻文件是 0 字节（进一步实测：fs_write 返回成功后立即 `(Get-Item).Length` 为 0，`Start-Sleep 2` 后才有内容 —— 是延迟落盘）。命令报「找不到任务/类」这类与脚本内容相关的错误时，第一步先 `(Get-Item <file>).Length` 或读回文件确认内容在；写文件与执行引用它的命令不要放在同一轮并行调用。
+- **测试期望值手算错**：把 `1716700000` 换算成 `05:46:40`，实际是 `05:06:40`；时序断言用「调用后取 now」比较，首次签名初始化耗时 6 秒导致误报。一次跑出 4 个 FAIL，其中 3 个是测试自身的错。期望值用与被测代码独立的标准实现现算（JDK `Instant`/`LocalDate`、`BigDecimal.compareTo`），不手写换算结果；时序断言用「调用前/调用后」区间夹逼。
+- **自行加入「金额 A 缺失回落 B 并切换币种」和多格式兼容**：实现解析逻辑时想到「万一平台给的是另一种格式 / 字段缺失怎么办」，自行加入 PKCS#1/PKCS#8/PEM/裸 Base64 全部支持、金额回落、币种兜底等分支，没有需求依据。用户要求「去掉额外的逻辑，只按该类型处理，其他情况抛异常」。需求只给了一种输入形态时，只实现那一种，其他情况明确失败；每个兜底分支都要能回答「需求依据是哪一句」，答不出就不写。
 - **fillAmount 早期版本是我自造的「received_money 优先、回落 price 原币」**，无需求依据，被用户追问来源后整段重写。
 - **按文档宣称的「窗口多放行 1 天」缺陷**：真实接口实测平台放行到 90 天（93 天起才报 100004，msg 仍写 31 天）；
   代码仍按文档口径限 31 个自然日，没依赖宽松行为。
