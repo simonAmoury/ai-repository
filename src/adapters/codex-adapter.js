@@ -3,24 +3,30 @@
 const fs = require("fs");
 const path = require("path");
 const { AgentAdapter } = require("./agent-adapter");
-const { ensureDir, writeText } = require("../core/files");
+const { writeText } = require("../core/files");
 const { renderInlineRules } = require("../core/inline-rules");
 const { updateManagedBlock } = require("../core/managed-block");
-const { renderMcpServers } = require("../core/mcp-toml");
 const { installProjectSupportFiles } = require("../core/project-support");
+const { TOML_START } = require("../core/user-mcp");
 
 const AGENTS_START = "<!-- ai-repository:begin (自动生成，请勿手动编辑此区块) -->";
 const AGENTS_END = "<!-- ai-repository:end -->";
-const MCP_START = "# ai-repository:mcp:begin";
-const MCP_END = "# ai-repository:mcp:end";
 
 class CodexAdapter extends AgentAdapter {
   skillsDirectory() {
     return path.join(this.homeDir, ".agents", "skills");
   }
 
+  userMcpFile() {
+    return path.join(this.homeDir, ".codex", "config.toml");
+  }
+
   installSkills() {
     return this.installSkillsAt("Codex");
+  }
+
+  syncUserMcp() {
+    return this.syncUserMcpAt("Codex", "toml");
   }
 
   installProject(projectDir) {
@@ -41,24 +47,14 @@ class CodexAdapter extends AgentAdapter {
     const currentAgents = fs.existsSync(agentsFile) ? fs.readFileSync(agentsFile, "utf8") : projectTemplate;
     writeText(agentsFile, updateManagedBlock(currentAgents, AGENTS_START, AGENTS_END, body, "prepend"));
 
-    const codexDir = path.join(project, ".codex");
-    ensureDir(codexDir);
-    const configFile = path.join(codexDir, "config.toml");
-    const currentConfig = fs.existsSync(configFile) ? fs.readFileSync(configFile, "utf8") : "";
-    const unmanagedConfig = currentConfig.replace(
-      new RegExp(`${MCP_START}[\\s\\S]*?${MCP_END}`, "g"),
-      "",
-    );
-    const rendered = renderMcpServers(this.repository.mcp().mcpServers, unmanagedConfig);
-    writeText(configFile, updateManagedBlock(currentConfig, MCP_START, MCP_END, rendered.text || "# 无需生成的 MCP Server", "append"));
-
-    const guardFile = installProjectSupportFiles(this.repository, project, [configFile]);
-
-    if (rendered.skipped.length) {
-      this.output.warn?.(`以下 MCP 已由项目手写配置管理，未覆盖: ${rendered.skipped.join(", ")}`);
+    const guardFile = installProjectSupportFiles(this.repository, project, []);
+    const legacyConfig = path.join(project, ".codex", "config.toml");
+    if (fs.existsSync(legacyConfig) && fs.readFileSync(legacyConfig, "utf8").includes(TOML_START)) {
+      this.warnLegacyProjectMcp([legacyConfig]);
     }
+
     this.output.log(`Codex 项目接入完成: ${project}`);
-    return { project, agentsFile, configFile, guardFile, skippedMcp: rendered.skipped };
+    return { project, agentsFile, guardFile };
   }
 }
 

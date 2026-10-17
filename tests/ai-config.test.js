@@ -51,12 +51,11 @@ test("统一配置按公司优先合并 MCP 与 Skill", () => {
   assert.ok(skills.some((skill) => skill.name === "terminal-title" && skill.layer === "personal"));
 });
 
-test("Claude 适配保持原入口、用户级 Skills 与项目生成物", (t) => {
+test("Claude 适配保持原入口、用户级 Skills 与项目生成物，不生成项目 MCP", (t) => {
   const { home, project } = workspace(t);
   const adapter = new ClaudeAdapter({
     repository: new RepositoryConfig(repositoryRoot),
     homeDir: home,
-    localStateDir: path.join(home, "state"),
     output: silentOutput(),
   });
 
@@ -66,7 +65,7 @@ test("Claude 适配保持原入口、用户级 Skills 与项目生成物", (t) =
   assert.match(first, /ai-repo-imports:start/);
   assert.match(first, /personal\/rules\/steering\/language\.md/);
   assert.ok(fs.existsSync(path.join(project, ".claude", "hooks-rules.md")));
-  assert.ok(fs.existsSync(path.join(project, ".mcp.json")));
+  assert.equal(fs.existsSync(path.join(project, ".mcp.json")), false);
   assert.ok(fs.existsSync(path.join(project, "sql-guard.json")));
 
   fs.appendFileSync(claudeFile, "\n## 手写规则\n保留我\n", "utf8");
@@ -80,7 +79,7 @@ test("Claude 适配保持原入口、用户级 Skills 与项目生成物", (t) =
   assert.ok(fs.existsSync(path.join(skills.destination, "terminal-title", "SKILL.md")));
 });
 
-test("Codex 适配生成 AGENTS.md、项目 MCP 与用户级 Skills", (t) => {
+test("Codex 适配生成 AGENTS.md 与用户级 Skills，不生成项目 MCP", (t) => {
   const { home, project } = workspace(t);
   const adapter = new CodexAdapter({
     repository: new RepositoryConfig(repositoryRoot),
@@ -90,12 +89,11 @@ test("Codex 适配生成 AGENTS.md、项目 MCP 与用户级 Skills", (t) => {
 
   adapter.installProject(project);
   const agentsFile = path.join(project, "AGENTS.md");
-  const configFile = path.join(project, ".codex", "config.toml");
   const first = fs.readFileSync(agentsFile, "utf8");
   assert.match(first, /ai-repository:begin/);
   assert.match(first, /全部都用中文提问、回答我/);
   assert.match(first, /MySQL SQL Guard/);
-  assert.match(fs.readFileSync(configFile, "utf8"), /\[mcp_servers\.mysql\]/);
+  assert.equal(fs.existsSync(path.join(project, ".codex", "config.toml")), false);
 
   fs.appendFileSync(agentsFile, "\n## 项目手写规则\n保留我\n", "utf8");
   adapter.installProject(project);
@@ -108,7 +106,7 @@ test("Codex 适配生成 AGENTS.md、项目 MCP 与用户级 Skills", (t) => {
   assert.ok(fs.existsSync(path.join(skills.destination, "write-online-sop", "SKILL.md")));
 });
 
-test("Kiro 适配生成项目 steering、项目 MCP 与用户级 Skills", (t) => {
+test("Kiro 适配生成项目 steering 与用户级 Skills，不生成项目 MCP", (t) => {
   const { home, project } = workspace(t);
   const adapter = new KiroAdapter({
     repository: new RepositoryConfig(repositoryRoot),
@@ -122,7 +120,7 @@ test("Kiro 适配生成项目 steering、项目 MCP 与用户级 Skills", (t) =>
   assert.match(first, /ai-repository:begin/);
   assert.match(first, /全部都用中文提问、回答我/);
   assert.match(first, /MySQL SQL Guard/);
-  assert.ok(fs.existsSync(path.join(project, ".kiro", "settings", "mcp.json")));
+  assert.equal(fs.existsSync(path.join(project, ".kiro", "settings", "mcp.json")), false);
   assert.ok(fs.existsSync(path.join(project, "sql-guard.json")));
 
   fs.appendFileSync(steeringFile, "\n## 项目手写规则\n保留我\n", "utf8");
@@ -170,41 +168,96 @@ test("Kiro Skills 必须落实体目录，不能用链接", (t) => {
   }
 });
 
-test("Kiro 不覆盖项目已有的 MCP 配置", (t) => {
-  const { home, project } = workspace(t);
-  const mcpFile = path.join(project, ".kiro", "settings", "mcp.json");
-  fs.mkdirSync(path.dirname(mcpFile), { recursive: true });
-  fs.writeFileSync(mcpFile, JSON.stringify({ mcpServers: { mysql: { command: "custom-mysql" } } }), "utf8");
+test("Kiro 用户级 MCP 写入 JSON 并按名称合并仓库 Server", (t) => {
+  const { home } = workspace(t);
+  const userMcp = path.join(home, ".kiro", "settings", "mcp.json");
+  fs.mkdirSync(path.dirname(userMcp), { recursive: true });
+  fs.writeFileSync(userMcp, JSON.stringify({ mcpServers: { manual: { command: "manual-tool" } } }), "utf8");
+
   const adapter = new KiroAdapter({
     repository: new RepositoryConfig(repositoryRoot),
     homeDir: home,
     output: silentOutput(),
   });
+  const result = adapter.syncUserMcp();
+  assert.equal(result.changed, true);
 
-  adapter.installProject(project);
-  assert.equal(JSON.parse(fs.readFileSync(mcpFile, "utf8")).mcpServers.mysql.command, "custom-mysql");
+  const value = JSON.parse(fs.readFileSync(userMcp, "utf8"));
+  assert.equal(value.mcpServers.manual.command, "manual-tool");
+  assert.ok(value.mcpServers.mysql);
+  assert.ok(value.mcpServers.codegraph);
+  assert.equal(adapter.syncUserMcp().changed, false);
 });
 
-test("Codex 不覆盖项目手写的同名 MCP", (t) => {
-  const { home, project } = workspace(t);
-  const codexDir = path.join(project, ".codex");
-  fs.mkdirSync(codexDir, { recursive: true });
+test("Codex 用户级 MCP 写入 TOML 托管区并跳过手写同名 Server", (t) => {
+  const { home } = workspace(t);
+  const userMcp = path.join(home, ".codex", "config.toml");
+  fs.mkdirSync(path.dirname(userMcp), { recursive: true });
   fs.writeFileSync(
-    path.join(codexDir, "config.toml"),
-    "[mcp_servers.mysql]\ncommand = \"custom-mysql\"\n",
+    userMcp,
+    "[mcp_servers.mysql]\ncommand = \"custom-mysql\"\n\n[mcp_servers.manual]\ncommand = \"manual-tool\"\n",
     "utf8",
   );
+
   const adapter = new CodexAdapter({
     repository: new RepositoryConfig(repositoryRoot),
     homeDir: home,
     output: silentOutput(),
   });
-  const result = adapter.installProject(project);
-  const config = fs.readFileSync(path.join(codexDir, "config.toml"), "utf8");
-  assert.deepEqual(result.skippedMcp, ["mysql"]);
-  assert.equal((config.match(/\[mcp_servers\.mysql\]/g) || []).length, 1);
-  assert.match(config, /command = "custom-mysql"/);
-  assert.match(config, /\[mcp_servers\.codegraph\]/);
+  const result = adapter.syncUserMcp();
+  assert.equal(result.changed, true);
+  assert.deepEqual(result.skipped, ["mysql"]);
+
+  const content = fs.readFileSync(userMcp, "utf8");
+  assert.equal((content.match(/\[mcp_servers\.mysql\]/g) || []).length, 1);
+  assert.match(content, /command = "custom-mysql"/);
+  assert.match(content, /\[mcp_servers\.manual\]/);
+  assert.match(content, /\[mcp_servers\.codegraph\]/);
+  assert.match(content, /ai-repository:mcp:begin/);
+  assert.equal(adapter.syncUserMcp().changed, false);
+});
+
+test("Claude 用户级 MCP 写入 ~/.claude.json 并合并现有内容", (t) => {
+  const { home } = workspace(t);
+  const userMcp = path.join(home, ".claude.json");
+  fs.mkdirSync(path.dirname(userMcp), { recursive: true });
+  fs.writeFileSync(userMcp, JSON.stringify({
+    projects: [{ path: "/path/to/project" }],
+    mcpServers: { manual: { command: "manual-tool" } },
+  }, null, 2), "utf8");
+
+  const adapter = new ClaudeAdapter({
+    repository: new RepositoryConfig(repositoryRoot),
+    homeDir: home,
+    output: silentOutput(),
+  });
+  const result = adapter.syncUserMcp();
+  assert.equal(result.changed, true);
+
+  const value = JSON.parse(fs.readFileSync(userMcp, "utf8"));
+  assert.deepEqual(value.projects, [{ path: "/path/to/project" }]);
+  assert.equal(value.mcpServers.manual.command, "manual-tool");
+  assert.ok(value.mcpServers.mysql);
+  assert.ok(value.mcpServers.codegraph);
+  assert.equal(adapter.syncUserMcp().changed, false);
+});
+
+test("Claude 用户级 MCP 在文件缺失时新建、在 JSON 损坏时中止", (t) => {
+  const { home } = workspace(t);
+  const adapter = new ClaudeAdapter({
+    repository: new RepositoryConfig(repositoryRoot),
+    homeDir: home,
+    output: silentOutput(),
+  });
+
+  adapter.syncUserMcp();
+  const userMcp = path.join(home, ".claude.json");
+  const value = JSON.parse(fs.readFileSync(userMcp, "utf8"));
+  assert.ok(value.mcpServers.mysql);
+
+  fs.writeFileSync(userMcp, "{ broken json", "utf8");
+  assert.throws(() => adapter.syncUserMcp(), /无法解析/);
+  assert.equal(fs.readFileSync(userMcp, "utf8"), "{ broken json");
 });
 
 test("受管的复制 Skill 可刷新并删除已下架 Skill", (t) => {
@@ -276,47 +329,6 @@ function createMcpRepository(root, host) {
   }, null, 2), "utf8");
 }
 
-test("Claude MCP 单项目同步会登记摘要并阻止覆盖手工修改", (t) => {
-  const { root, home, project } = workspace(t);
-  const source = path.join(root, "repository");
-  const state = path.join(root, "state");
-  createMcpRepository(source, "host-one");
-
-  let adapter = new ClaudeAdapter({
-    repository: new RepositoryConfig(source),
-    homeDir: home,
-    localStateDir: state,
-    output: silentOutput(),
-  });
-  adapter.installProject(project);
-  const mcpFile = path.join(project, ".mcp.json");
-  assert.equal(JSON.parse(fs.readFileSync(mcpFile, "utf8")).mcpServers.demo.env.DEMO_HOST, "host-one");
-
-  createMcpRepository(source, "host-two");
-  adapter = new ClaudeAdapter({
-    repository: new RepositoryConfig(source),
-    homeDir: home,
-    localStateDir: state,
-    output: silentOutput(),
-  });
-  adapter.syncMcpProject(project);
-  assert.equal(JSON.parse(fs.readFileSync(mcpFile, "utf8")).mcpServers.demo.env.DEMO_HOST, "host-two");
-
-  fs.writeFileSync(mcpFile, JSON.stringify({ manuallyChanged: true }), "utf8");
-  createMcpRepository(source, "host-three");
-  adapter = new ClaudeAdapter({
-    repository: new RepositoryConfig(source),
-    homeDir: home,
-    localStateDir: state,
-    output: silentOutput(),
-  });
-  assert.throws(() => adapter.syncMcpProject(project), /已被手工修改/);
-  assert.deepEqual(JSON.parse(fs.readFileSync(mcpFile, "utf8")), { manuallyChanged: true });
-
-  adapter.syncMcpProject(project, { force: true });
-  assert.equal(JSON.parse(fs.readFileSync(mcpFile, "utf8")).mcpServers.demo.env.DEMO_HOST, "host-three");
-});
-
 test("记忆库骨架幂等创建", (t) => {
   const { root } = workspace(t);
   const repo = path.join(root, "repository");
@@ -357,41 +369,6 @@ test("记忆库 status 统计教训条目与项目记忆", (t) => {
   assert.equal(result.exists, true);
   assert.equal(result.lessons, 2);
   assert.deepEqual(result.projects, [{ project: "demo-project", memories: ["feature-a.md"] }]);
-});
-
-test("Claude MCP --all 同步所有已登记项目", (t) => {
-  const { root, home } = workspace(t);
-  const source = path.join(root, "repository");
-  const state = path.join(root, "state");
-  const projectOne = path.join(root, "project-one");
-  const projectTwo = path.join(root, "project-two");
-  fs.mkdirSync(projectOne);
-  fs.mkdirSync(projectTwo);
-  createMcpRepository(source, "before");
-
-  let adapter = new ClaudeAdapter({
-    repository: new RepositoryConfig(source),
-    homeDir: home,
-    localStateDir: state,
-    output: silentOutput(),
-  });
-  adapter.installProject(projectOne);
-  adapter.installProject(projectTwo);
-
-  createMcpRepository(source, "after");
-  adapter = new ClaudeAdapter({
-    repository: new RepositoryConfig(source),
-    homeDir: home,
-    localStateDir: state,
-    output: silentOutput(),
-  });
-  const result = adapter.syncAllMcp();
-  assert.equal(result.synced.length, 2);
-  assert.equal(result.failed.length, 0);
-  for (const project of [projectOne, projectTwo]) {
-    const value = JSON.parse(fs.readFileSync(path.join(project, ".mcp.json"), "utf8"));
-    assert.equal(value.mcpServers.demo.env.DEMO_HOST, "after");
-  }
 });
 
 test("RepositoryConfig 保持配置选择、层级覆盖与稳定排序", (t) => {
@@ -475,7 +452,6 @@ test("Claude 用户级设置只覆盖托管键并保留本机密钥", (t) => {
   const adapter = new ClaudeAdapter({
     repository: new RepositoryConfig(repositoryRoot),
     homeDir: home,
-    localStateDir: path.join(home, "state"),
     output: silentOutput(),
   });
   const result = adapter.syncUserSettings();
@@ -496,7 +472,6 @@ test("Claude 用户级设置在无文件时新建、在文件损坏时中止", (
   const adapter = new ClaudeAdapter({
     repository: new RepositoryConfig(repositoryRoot),
     homeDir: home,
-    localStateDir: path.join(home, "state"),
     output: silentOutput(),
   });
 
@@ -551,17 +526,16 @@ test("Hook Markdown 保持过滤、分组和格式化规则", () => {
 
 test("Git 本地排除规则幂等追加且不修改项目 gitignore", (t) => {
   const { project } = workspace(t);
-  assert.equal(addLocalIgnores(project, [".mcp.json"]), false);
+  assert.equal(addLocalIgnores(project, ["sql-guard.json"]), false);
   git(project, "init");
   const gitignore = path.join(project, ".gitignore");
   fs.writeFileSync(gitignore, "node_modules/\n", "utf8");
 
-  assert.equal(addLocalIgnores(project, [".mcp.json", "sql-guard.json"]), true);
-  assert.equal(addLocalIgnores(project, [".mcp.json", "sql-guard.json"]), true);
+  assert.equal(addLocalIgnores(project, ["sql-guard.json"]), true);
+  assert.equal(addLocalIgnores(project, ["sql-guard.json"]), true);
   const excludeFile = git(project, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude");
   const exclude = fs.readFileSync(excludeFile, "utf8");
   assert.equal((exclude.match(/# ai-repository 本地生成文件/g) || []).length, 1);
-  assert.equal((exclude.match(/^\.mcp\.json$/gm) || []).length, 1);
   assert.equal((exclude.match(/^sql-guard\.json$/gm) || []).length, 1);
   assert.equal(fs.readFileSync(gitignore, "utf8"), "node_modules/\n");
 });

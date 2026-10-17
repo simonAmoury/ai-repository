@@ -3,10 +3,9 @@
 const fs = require("fs");
 const path = require("path");
 const { AgentAdapter } = require("./agent-adapter");
-const { writeText, writeTextIfMissing } = require("../core/files");
+const { writeText } = require("../core/files");
 const { renderInlineRules } = require("../core/inline-rules");
 const { updateManagedBlock } = require("../core/managed-block");
-const { renderMcpJson } = require("../core/mcp-project-registry");
 const { installProjectSupportFiles } = require("../core/project-support");
 
 const STEERING_START = "<!-- ai-repository:begin (自动生成，请勿手动编辑此区块) -->";
@@ -17,10 +16,18 @@ class KiroAdapter extends AgentAdapter {
     return path.join(this.homeDir, ".kiro", "skills");
   }
 
+  userMcpFile() {
+    return path.join(this.homeDir, ".kiro", "settings", "mcp.json");
+  }
+
   // Kiro 的 skill 扫描是 readdir(withFileTypes) + isDirectory() 过滤，
   // junction 会被判成 link 而整条跳过，因此必须落实体目录而非链接。
   installSkills() {
     return this.installSkillsAt("Kiro", "copy");
+  }
+
+  syncUserMcp() {
+    return this.syncUserMcpAt("Kiro", "json");
   }
 
   installProject(projectDir) {
@@ -35,13 +42,12 @@ class KiroAdapter extends AgentAdapter {
     const currentSteering = fs.existsSync(steeringFile) ? fs.readFileSync(steeringFile, "utf8") : "";
     writeText(steeringFile, updateManagedBlock(currentSteering, STEERING_START, STEERING_END, body, "prepend"));
 
-    const mcpFile = path.join(project, ".kiro", "settings", "mcp.json");
-    writeTextIfMissing(mcpFile, renderMcpJson(this.repository.mcp()));
-
-    const guardFile = installProjectSupportFiles(this.repository, project, [mcpFile]);
+    const guardFile = installProjectSupportFiles(this.repository, project, []);
+    const legacyMcp = path.join(project, ".kiro", "settings", "mcp.json");
+    if (fs.existsSync(legacyMcp)) this.warnLegacyProjectMcp([legacyMcp]);
 
     this.output.log(`Kiro 项目接入完成: ${project}`);
-    return { project, steeringFile, mcpFile, guardFile };
+    return { project, steeringFile, guardFile };
   }
 }
 

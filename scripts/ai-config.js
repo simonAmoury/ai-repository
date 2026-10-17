@@ -14,12 +14,13 @@ function usage() {
 
 用法:
   node scripts/ai-config.js claude skills
+  node scripts/ai-config.js claude mcp
   node scripts/ai-config.js claude install [项目目录]
-  node scripts/ai-config.js claude mcp-sync <项目目录> [--force]
-  node scripts/ai-config.js claude mcp-sync --all [--force]
   node scripts/ai-config.js codex skills
+  node scripts/ai-config.js codex mcp
   node scripts/ai-config.js codex install [项目目录]
   node scripts/ai-config.js kiro skills
+  node scripts/ai-config.js kiro mcp
   node scripts/ai-config.js kiro install [项目目录]
   node scripts/ai-config.js hooks install
   node scripts/ai-config.js memory init
@@ -29,7 +30,8 @@ function usage() {
   - Claude Skills 安装到用户级 ~/.claude/skills
   - Codex Skills 安装到用户级 ~/.agents/skills
   - Kiro Skills 安装到用户级 ~/.kiro/skills
-  - install 只更新脚本托管区，不覆盖项目手写规则和已有安全配置
+  - mcp 将 MCP 写入用户级配置（Claude ~/.claude.json、Codex ~/.codex/config.toml、Kiro ~/.kiro/settings/mcp.json），只覆盖仓库声明的同名 Server
+  - install 不再生成项目级 MCP；只更新脚本托管区，不覆盖项目手写规则和已有安全配置
   - hooks install 为当前 ai-repository 注册 Git Hooks，Skill 变化后自动同步
   - memory init 在 ai-repository/memory 下创建记忆库骨架（幂等，不覆盖已有内容）
   - memory status 打印记忆库根目录与统计，供 Agent 定位记忆库位置

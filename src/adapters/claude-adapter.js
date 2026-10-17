@@ -4,17 +4,10 @@ const fs = require("fs");
 const path = require("path");
 const { AgentAdapter } = require("./agent-adapter");
 const { applyUserSettings } = require("../core/claude-user-settings");
-const { ensureDir, writeText, writeTextIfMissing } = require("../core/files");
-const { addLocalIgnores } = require("../core/git-exclude");
+const { ensureDir, writeText } = require("../core/files");
 const { generateHookMarkdown } = require("../core/hook-markdown");
 const { updateManagedBlock } = require("../core/managed-block");
 const { installProjectSupportFiles } = require("../core/project-support");
-const {
-  hashText,
-  jsonEquals,
-  McpProjectRegistry,
-  renderMcpJson,
-} = require("../core/mcp-project-registry");
 
 const START = "<!-- ai-repo-imports:start -->";
 const END = "<!-- ai-repo-imports:end -->";
@@ -27,10 +20,6 @@ function relativeImport(projectDir, repositoryRoot) {
 }
 
 class ClaudeAdapter extends AgentAdapter {
-  registry() {
-    return new McpProjectRegistry(this.repository.root, this.localStateDir);
-  }
-
   skillsDirectory() {
     return path.join(this.homeDir, ".claude", "skills");
   }
@@ -39,10 +28,19 @@ class ClaudeAdapter extends AgentAdapter {
     return path.join(this.homeDir, ".claude", "settings.json");
   }
 
+  // Claude 用户级 MCP 存放在 ~/.claude.json 根级 mcpServers（不是 ~/.claude/settings.json）。
+  userMcpFile() {
+    return path.join(this.homeDir, ".claude.json");
+  }
+
   installSkills() {
     const result = this.installSkillsAt("Claude");
     this.syncUserSettings();
     return result;
+  }
+
+  syncUserMcp() {
+    return this.syncUserMcpAt("Claude", "json");
   }
 
   syncUserSettings() {
@@ -105,68 +103,12 @@ class ClaudeAdapter extends AgentAdapter {
     const current = fs.existsSync(claudeFile) ? fs.readFileSync(claudeFile, "utf8") : initial;
     writeText(claudeFile, updateManagedBlock(current, START, END, block.join("\n"), "append"));
 
-    const mcpFile = path.join(project, ".mcp.json");
-    const desiredMcp = renderMcpJson(this.repository.mcp());
-    writeTextIfMissing(mcpFile, desiredMcp);
-    const currentMcp = fs.readFileSync(mcpFile, "utf8");
-    if (jsonEquals(currentMcp, this.repository.mcp())) {
-      this.registry().register(project, hashText(currentMcp));
-    } else if (!this.registry().get(project)) {
-      this.output.warn?.(`项目已有非受管 .mcp.json，未登记自动同步: ${mcpFile}`);
-    }
-    const guardFile = installProjectSupportFiles(this.repository, project, [mcpFile]);
+    const guardFile = installProjectSupportFiles(this.repository, project, []);
+    const legacyMcp = path.join(project, ".mcp.json");
+    if (fs.existsSync(legacyMcp)) this.warnLegacyProjectMcp([legacyMcp]);
 
     this.output.log(`Claude 项目接入完成: ${project}`);
-    return { project, claudeFile, hooksFile, mcpFile, guardFile };
-  }
-
-  syncMcpProject(projectDir, { force = false } = {}) {
-    const project = this.resolveProjectDir(projectDir);
-
-    const mcpFile = path.join(project, ".mcp.json");
-    const desiredValue = this.repository.mcp();
-    const desiredContent = renderMcpJson(desiredValue);
-    const registry = this.registry();
-    const registered = registry.get(project);
-
-    if (fs.existsSync(mcpFile)) {
-      const currentContent = fs.readFileSync(mcpFile, "utf8");
-      if (registered) {
-        const currentHash = hashText(currentContent);
-        if (currentHash !== registered.contentHash && !force) {
-          throw new Error(`项目 .mcp.json 已被手工修改，拒绝覆盖: ${mcpFile}（如确认覆盖请加 --force）`);
-        }
-      } else if (!jsonEquals(currentContent, desiredValue) && !force) {
-        throw new Error(`项目 .mcp.json 尚未受 ai-repository 管理，拒绝覆盖: ${mcpFile}（如确认覆盖请加 --force）`);
-      }
-    }
-
-    writeText(mcpFile, desiredContent);
-    registry.register(project, hashText(desiredContent));
-    addLocalIgnores(project, [".mcp.json"]);
-    this.output.log(`Claude MCP 已同步: ${mcpFile}`);
-    return { project, mcpFile, contentHash: hashText(desiredContent) };
-  }
-
-  syncAllMcp({ force = false } = {}) {
-    const projects = this.registry().projects();
-    if (!projects.length) {
-      this.output.log("尚无已登记的 Claude 项目；请先执行 claude install <项目目录>");
-      return { synced: [], failed: [] };
-    }
-
-    const result = { synced: [], failed: [] };
-    for (const entry of projects) {
-      try {
-        this.syncMcpProject(entry.path, { force });
-        result.synced.push(entry.path);
-      } catch (error) {
-        result.failed.push({ project: entry.path, message: error.message });
-        this.output.warn?.(`[MCP 同步失败] ${entry.path}: ${error.message}`);
-      }
-    }
-    this.output.log(`Claude MCP 批量同步完成: 成功 ${result.synced.length} / 失败 ${result.failed.length}`);
-    return result;
+    return { project, claudeFile, hooksFile, guardFile };
   }
 }
 

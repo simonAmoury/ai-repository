@@ -44,12 +44,15 @@ cd D:\hub\ai-repository
 
 # 创建本机公司级 MCP 真实配置，并填写主机、用户名、密码等真实值
 Copy-Item company\mcp\settings.template.json company\mcp\settings.json
-# 编辑 company\mcp\settings.json 后，再执行任何项目 install
+# 编辑 company\mcp\settings.json 后，再写入用户级 MCP
 
-# 按实际使用的 Agent 安装用户级 Skills 和 settings；不使用的 Agent 可以跳过
+# 按实际使用的 Agent 安装用户级 Skills、settings 和 MCP；不使用的 Agent 可以跳过
 node scripts\ai-config.js claude skills
+node scripts\ai-config.js claude mcp
 node scripts\ai-config.js codex skills
+node scripts\ai-config.js codex mcp
 node scripts\ai-config.js kiro skills
+node scripts\ai-config.js kiro mcp
 
 # 为当前 ai-repository 启用 Skill 自动同步 Hook
 node scripts\ai-config.js hooks install
@@ -160,7 +163,6 @@ Skills 不使用 `@import`，也不安装到项目 `.claude/skills/`。
 |---|---|
 | `CLAUDE.md` | 项目规则入口；托管区通过 `@import` 动态引用本仓库 steering |
 | `.claude/hooks-rules.md` | `.rule.json` 转换后的文本规则 |
-| `.mcp.json` | 项目 MCP 配置，已存在时不覆盖 |
 | `sql-guard.json` | SQL 白名单模板，已存在时不覆盖 |
 
 ## Codex 策略
@@ -174,12 +176,9 @@ Codex Skills 安装到用户级 `~/.agents/skills/`，链接及覆盖策略与 C
 | 文件 | 作用 |
 |---|---|
 | `AGENTS.md` | 写入完整公司/个人规则；只更新 ai-repository 托管区 |
-| `.codex/config.toml` | 项目级 MCP 配置；只更新 MCP 托管区 |
 | `sql-guard.json` | SQL 白名单模板，已存在时不覆盖 |
 
 Codex 不支持本仓库使用的 Claude `@import` 接线方式，因此规则源变更后需要重新执行一次 `codex install`。Skill 使用目录链接时无需重装。
-
-如果 `.codex/config.toml` 已有项目手写的同名 MCP Server，脚本会保留手写配置并跳过该 Server。
 
 ## Kiro 策略
 
@@ -192,14 +191,11 @@ Kiro Skills 安装到用户级 `~/.kiro/skills/`，链接及覆盖策略与 Clau
 | 文件 | 作用 |
 |---|---|
 | `.kiro/steering/ai-repository.md` | 写入完整公司/个人规则与 Hook 规则；只更新 ai-repository 托管区 |
-| `.kiro/settings/mcp.json` | 项目 MCP 配置，已存在时不覆盖 |
 | `sql-guard.json` | SQL 白名单模板，已存在时不覆盖 |
 
 Kiro steering 的 `#[[file:...]]` 只能引用工作区内文件，无法指向本仓库，因此与 Codex 一样内联完整规则，规则源变更后需要重新执行一次 `kiro install`。Skill 使用目录链接时无需重装。
 
 `.kiro/steering/` 是多文件目录，项目自有规则放在同目录其他 `.md` 中即可，脚本只维护 `ai-repository.md` 的托管区。
-
-项目 `.kiro/settings/mcp.json` 已存在时不覆盖；需要用当前源配置重新生成时，删除该文件后重跑 `kiro install`。
 
 ## MCP 与凭据
 
@@ -209,13 +205,28 @@ Kiro steering 的 `#[[file:...]]` 只能引用工作区内文件，无法指向�
   Copy-Item company\mcp\settings.template.json company\mcp\settings.json
   ```
 
-- 打开 `company/mcp/settings.json`，将 `<your-host>`、`<your-user>`、`<your-password>` 等占位符替换为本机真实配置，然后再执行 Claude/Codex 的项目 `install`。
+- 打开 `company/mcp/settings.json`，将 `<your-host>`、`<your-user>`、`<your-password>` 等占位符替换为本机真实配置，然后执行对应 Agent 的 `mcp` 命令。
 - `company/mcp/settings.json` 已被 Git 忽略，只保存在本机；远端只保留脱敏的 `settings.template.json`。
 - 每层优先读取被 Git 忽略的 `mcp/settings.json`，缺失时读取 `settings.template.json`。
 - 先加载个人 MCP，再以公司同名 Server 覆盖。
-- Claude 输出 `.mcp.json`；Codex 输出 `.codex/config.toml`；Kiro 输出 `.kiro/settings/mcp.json`。
-- MCP 配置和 `sql-guard.json` 会加入目标项目的 `.git/info/exclude`，不会修改项目 `.gitignore`。
+- MCP 统一为用户级，所有项目共用；`install` 不再生成任何项目级 MCP 文件。
+- `sql-guard.json` 会加入目标项目的 `.git/info/exclude`，不会修改项目 `.gitignore`。
 - 不要把真实凭据提交到仓库。
+
+### 用户级 MCP
+
+```powershell
+node scripts\ai-config.js claude mcp   # 写入 ~/.claude.json 根级 mcpServers
+node scripts\ai-config.js codex mcp    # 写入 ~/.codex/config.toml 的 MCP 托管区
+node scripts\ai-config.js kiro mcp     # 写入 ~/.kiro/settings/mcp.json
+```
+
+- 更新 `mcp/settings.json` 后重跑对应命令，再重启 Agent 生效。
+- Claude/Kiro 的 JSON 按 Server 名称合并：只覆盖仓库声明的同名 Server，本机自加的 Server 和其他键（如 `~/.claude.json` 中的项目状态）原样保留。
+- Codex 只替换 `# ai-repository:mcp:begin/end` 托管区；托管区外已手写的同名 Server 优先保留并跳过。
+- 从仓库删除的 Server 不会自动从 Claude/Kiro 的用户级 JSON 移除，需要手动清理。
+- 文件格式损坏时中止并报错，不覆盖原文件。
+- 旧版本生成的项目级 MCP（`.mcp.json`、`.codex/config.toml` 托管区、`.kiro/settings/mcp.json`）不会自动删除；`install` 检测到时会提示。项目级同名 Server 会覆盖用户级，确认不再需要后请手动清理。
 
 ### Claude 用户级 settings 托管
 
@@ -230,35 +241,6 @@ Kiro steering 的 `#[[file:...]]` 只能引用工作区内文件，无法指向�
 - 现有 `~/.claude/settings.json` 中的托管键会被仓库值覆盖；本机保留键原样保留。
 - 文件不存在时新建；格式损坏时中止并报错，不覆盖原文件。
 - 当前仓库已托管 `ENABLE_TOOL_SEARCH: "true"`（在非第一方 `ANTHROPIC_BASE_URL` 环境下强制开启 tool search，需代理支持 `tool_reference`）。
-
-### Claude MCP 同步
-
-执行 `claude install` 时，脚本会登记由 `ai-repository` 生成、或与当前源配置一致的项目 `.mcp.json`。登记表保存在本机的 `.ai-repository-local/mcp-projects.json`，已被 Git 忽略且不保存 MCP 凭据。
-
-更新 `company/mcp/settings.json` 后，可以同步单个项目：
-
-```powershell
-node scripts\ai-config.js claude mcp-sync D:\hub\pac-platform
-```
-
-也可以同步所有已登记项目：
-
-```powershell
-node scripts\ai-config.js claude mcp-sync --all
-```
-
-安全规则：
-
-- 同步前校验上次生成内容的 SHA-256 摘要；
-- 如果项目 `.mcp.json` 被手工修改，默认拒绝覆盖；
-- 未受管且与当前源配置不同的 `.mcp.json` 默认拒绝覆盖；
-- 确认以公司/个人合并配置覆盖项目文件时，可显式增加 `--force`；
-- `--all` 只处理执行过 `claude install` 并已成功登记的项目。
-
-```powershell
-node scripts\ai-config.js claude mcp-sync D:\hub\pac-platform --force
-node scripts\ai-config.js claude mcp-sync --all --force
-```
 
 ## 长期记忆
 
@@ -280,4 +262,4 @@ memory/
 node --test tests/ai-config.test.js
 ```
 
-测试覆盖 Claude 兼容生成物、三种用户级 Skill 目录、Codex 与 Kiro 生成物、幂等更新、手写规则保留和 MCP 冲突保护。
+测试覆盖 Claude 兼容生成物、三种用户级 Skill 目录、Codex 与 Kiro 生成物、幂等更新、手写规则保留和用户级 MCP 合并保护。

@@ -61,16 +61,8 @@ function dispatchAgent({ agentName, normalizedAgent, action, args, adapters }) {
   if (!adapter) throw new Error(`不支持的 Agent: ${agentName}（仅支持 claude、codex、kiro）`);
   if (action === "skills") adapter.installSkills();
   else if (action === "install") adapter.installProject(args[0] || process.cwd());
-  else if (action === "mcp-sync" && normalizedAgent === "claude") {
-    const force = args.includes("--force");
-    if (args.includes("--all")) {
-      const result = adapter.syncAllMcp({ force });
-      if (result.failed.length) throw new Error(`${result.failed.length} 个项目 MCP 同步失败`);
-    } else {
-      const project = args.find((value) => value !== "--force") || process.cwd();
-      adapter.syncMcpProject(project, { force });
-    }
-  } else throw new Error(`不支持的操作: ${action}`);
+  else if (action === "mcp") adapter.syncUserMcp();
+  else throw new Error(`不支持的操作: ${action}`);
 }
 
 function dispatchInvocation({ agentName, action, args, adapters, repositoryRoot, output = console }) {

@@ -34,4 +34,6 @@ code_anchors:
 
 2026-08-25 已用隔离仓库、独立 `AI_CONFIG_HOME` 和三个临时 Git 项目执行真实 CLI 集成自测：Claude/Codex/Kiro 首次安装、重复安装、手写规则保留、各自 MCP 冲突策略、Skills 安装、Git exclude、Hook 三端 Skill 自动同步均通过；Claude `mcp-sync` 拒绝手改及 `--force` 覆盖也通过。该验证只覆盖本地生成与保护逻辑，不代表外部 MCP Server 网络连通性。
 
+注意：2026-10-16 起 MCP 已改为用户级，`mcp-sync` 与项目级 MCP 写入已移除，见 `mcp-user-level-only.md`；上文 MCP 相关描述仅为历史状态。
+
 下次改动前重点核对三个 Adapter 的规则层顺序和 MCP 写入点；不要将三个 `installProject` 强行统一。修改 Skill 目录约定时同时核对各 Adapter 的 `skillsDirectory()` 与 `cli-runner.js` 的自动同步遍历。修改生成 marker 时，应更新精确 marker 表征测试，并确认规则正文不会影响计数。
